@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: enforcer
+        working-directory: .
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -30,7 +30,7 @@ jobs:
       # A short fuzz run on every push. New failures land in testdata/ as
       # permanent regression cases rather than being rediscovered later.
       - name: fuzz (smoke)
-        run: go test -run '^$' -fuzz=FuzzDecide -fuzztime=45s .
+        run: go test -run '^$' -fuzz=FuzzDecide -fuzztime=45s ./enforcer
 
       - name: fuzz rounding (smoke)
-        run: go test -run '^$' -fuzz=FuzzRoundWithin -fuzztime=30s .
+        run: go test -run '^$' -fuzz=FuzzRoundWithin -fuzztime=30s ./enforcer

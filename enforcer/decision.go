@@ -91,3 +91,20 @@ func (d Decision) Blocked() bool {
 	}
 	return false
 }
+
+// BoundByPolicy reports whether a guardrail actually overrode the proposal, as
+// opposed to the price merely being rounded to a permitted ending.
+//
+// Both outcomes are ActionClamp, but they mean very different things to a
+// merchant: one says "your policy disagreed with the model", the other says
+// "we tidied the ending". With a rounding rule enabled almost every proposal is
+// technically clamped, so without this distinction the action alone stops
+// carrying information.
+func (d Decision) BoundByPolicy() bool {
+	for _, r := range d.Reasons {
+		if r.Effect == EffectClamped && r.Rule != RuleRounding {
+			return true
+		}
+	}
+	return false
+}

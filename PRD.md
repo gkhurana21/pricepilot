@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Status | Draft v1.0 |
+| Status | v1.1 — phases 1 and 2 built |
 | Owner | Gaurang Khurana |
 | Builds on | [BulkPilot](https://github.com/gkhurana21/bulkpilot) — embedded Shopify app, OAuth, `productVariantsBulkUpdate`, snapshot rollback |
 | Target | Shopify SWE / Data co-op application |
@@ -98,7 +98,7 @@ This is the same separation as [tradebot](https://github.com/gkhurana21/tradebot
 
 ## 6. Scope
 
-### Phase 1 — the enforcer (week 1)
+### Phase 1 — the enforcer (week 1) · **BUILT**
 The policy engine, standalone and fully tested, before any model exists.
 
 - Policy schema: margin floor (absolute or %), MAP price, max Δ% per cycle, min days between changes per SKU, collection/tag exclusions, rounding rules (.99, .95, whole)
@@ -107,14 +107,16 @@ The policy engine, standalone and fully tested, before any model exists.
 - Golden-file tests for every rule and every interaction between rules
 
 **Exit:** the enforcer cannot be made to violate an invariant by any generated input.
+**Result:** 4.5M fuzz executions, 0 violations. 49 discovered corpus entries committed as regression cases. Two defects found by the tests: clamps naming the wrong binding rule, and a summary breakdown that undercounted.
 
-### Phase 2 — demand signal + proposer (weeks 2–3)
+### Phase 2 — demand signal + proposer (weeks 2–3) · **BUILT**
 - **Elasticity estimation** per product/collection from order history: log-log regression of quantity on price with controls, shrunk toward the collection mean when a SKU has thin data (hierarchical/partial pooling — the honest fix for sparse SKUs)
 - Confidence interval per estimate; **low-confidence SKUs propose no change** rather than a noisy one
 - Inventory-age and sell-through signals for markdown candidates
 - Proposal = the margin-optimal price under the estimated demand curve, then handed to the enforcer
 
 **Exit:** on synthetic data with known ground-truth elasticity, the estimator recovers β within ±15% and its confidence intervals are calibrated.
+**Result:** 0.4%–6.7% error on well-identified SKUs; 94.8% coverage on a stated 95% interval over 600 trials; 56% MSE reduction from pooling across 40 sparse SKUs. Two defects found: a zero-variance control column made X'X singular for every SKU that never went on promo, and catalog-wide pooling degraded well-identified SKUs until it was scoped to collections.
 
 ### Phase 3 — merchant app (weeks 4–5)
 Extends the existing BulkPilot codebase.

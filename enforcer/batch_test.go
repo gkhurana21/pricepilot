@@ -2,6 +2,7 @@ package enforcer
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 )
 
@@ -139,5 +140,56 @@ func TestPolicyHashTracksMeaningfulChanges(t *testing.T) {
 	b.MaxDecreaseBP = a.MaxDecreaseBP + 1
 	if PolicyHash(a) == PolicyHash(b) {
 		t.Fatal("a changed guardrail must change the hash")
+	}
+}
+
+// TestSummaryReconciles asserts the two ways of counting rejections agree.
+//
+// This exists because a demo printed "8 held back" above a breakdown summing to
+// 6. The engine was right and the display was wrong, but the lesson generalises:
+// any figure a merchant can add up themselves has to add up, or they stop
+// trusting the figures they cannot check.
+func TestSummaryReconciles(t *testing.T) {
+	rng := rand.New(rand.NewSource(4242))
+	buf := make([]byte, 96)
+
+	for run := 0; run < 2000; run++ {
+		n := 1 + int(rng.Int31n(15))
+		items := make([]Item, n)
+		var pol Policy
+		for i := range items {
+			rng.Read(buf)
+			p, state, prop, _ := decodeScenario(buf)
+			if i == 0 {
+				pol = p
+			}
+			state.ID = fmt.Sprintf("sku_%02d", i)
+			prop.SKUID = state.ID
+			items[i] = Item{SKU: state, Proposal: prop}
+		}
+
+		res := DecideBatch(Request{Policy: pol, Now: testNow, Items: items})
+		s := res.Summary
+
+		if got := s.Approved + s.Clamped + s.Rejected; got != s.Total {
+			t.Fatalf("run %d: approved+clamped+rejected = %d, total = %d", run, got, s.Total)
+		}
+		if s.Total != len(items) {
+			t.Fatalf("run %d: total = %d, submitted %d", run, s.Total, len(items))
+		}
+
+		var byRule int
+		for _, n := range s.RejectedByRule {
+			byRule += n
+		}
+		if byRule != s.Rejected {
+			t.Fatalf("run %d: rejection breakdown sums to %d but %d were rejected",
+				run, byRule, s.Rejected)
+		}
+
+		if s.Increases+s.Decreases != s.Approved+s.Clamped {
+			t.Fatalf("run %d: %d increases + %d decreases != %d changes",
+				run, s.Increases, s.Decreases, s.Approved+s.Clamped)
+		}
 	}
 }

@@ -10,6 +10,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -90,10 +91,8 @@ func main() {
 		s.Total, s.Approved, s.Clamped, s.Rejected, s.Increases, s.Decreases)
 	if len(s.RejectedByRule) > 0 {
 		fmt.Printf("  held back by:")
-		for _, rule := range ruleOrder {
-			if n := s.RejectedByRule[rule]; n > 0 {
-				fmt.Printf("  %s×%d", rule, n)
-			}
+		for _, rule := range heldBackBreakdown(s.RejectedByRule) {
+			fmt.Printf("  %s×%d", rule, s.RejectedByRule[rule])
 		}
 		fmt.Println()
 	}
@@ -105,10 +104,23 @@ func main() {
 	}
 }
 
-var ruleOrder = []enforcer.RuleID{
-	enforcer.RuleExcluded, enforcer.RuleConfidence, enforcer.RuleVelocityDays,
-	enforcer.RuleVelocityCount, enforcer.RuleInfeasible, enforcer.RuleNoChange,
-	enforcer.RuleInvalidInput, enforcer.RuleBatchBudget,
+// heldBackBreakdown orders whatever the summary actually contains, largest
+// cause first. An earlier version walked a hardcoded list of rule ids instead
+// and silently dropped every rule missing from it — the printed breakdown then
+// summed to less than the rejection count. Print what is there; never enumerate
+// what you assume is there.
+func heldBackBreakdown(byRule map[enforcer.RuleID]int) []enforcer.RuleID {
+	out := make([]enforcer.RuleID, 0, len(byRule))
+	for rule := range byRule {
+		out = append(out, rule)
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if byRule[out[a]] != byRule[out[b]] {
+			return byRule[out[a]] > byRule[out[b]]
+		}
+		return out[a] < out[b]
+	})
+	return out
 }
 
 func section(title string, res enforcer.Result, items []enforcer.Item, match func(enforcer.Decision) bool) {

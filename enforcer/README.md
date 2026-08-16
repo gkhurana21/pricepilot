@@ -57,6 +57,8 @@ PASS
 
 **A clamp names the rule that actually bound it.** An early version attributed every upward clamp to the margin floor; a table test caught it doing that when `max_decrease` was the real constraint. Telling a merchant the wrong rule sends them to edit the wrong setting, which is its own kind of wrong answer.
 
+**Any figure a merchant can add up must add up.** The demo once printed "8 held back" above a breakdown summing to 6 — the engine was right and the display walked a hardcoded list of rule ids that had drifted. The breakdown is now derived from the summary itself, and `TestSummaryReconciles` asserts the two counts agree. Numbers a reader can check are the ones that earn trust in the numbers they cannot.
+
 **A one-cent change is not a change.** `MinChangeBP` rejects moves too small to matter. Without it, a rounding rule manufactures a $12.00 → $11.99 markdown on a SKU the estimator explicitly said to leave alone, spending an API call and a velocity slot for nothing.
 
 **The change budget is decided across the run, not per SKU.** A merchant capping "never move more than half my catalog at once" is guarding against a systemic estimator failure. Survivors are chosen highest-confidence-first with ties broken by SKU id, so re-running a review never shuffles the set.
@@ -70,6 +72,7 @@ PASS
 | `TestDecisionIsAFixedPoint` | Re-deciding a settled price proposes nothing further — a scheduled repricer cannot oscillate |
 | `TestRaisingTheMarginFloorNeverLowersThePrice` | A stricter policy never produces a worse outcome |
 | `TestMarginFloorArithmetic` | 40% gross margin on $10.00 cost is $16.67; the same numbers as *markup* are $14.00 |
+| `TestSummaryReconciles` | Every figure a merchant can add up themselves does add up, across 2k random batches |
 | `FuzzDecide` | All six invariants plus determinism, under arbitrary input |
 | `FuzzRoundWithin` | Rounding lands on the pattern, inside the interval, and at the nearest permitted value |
 

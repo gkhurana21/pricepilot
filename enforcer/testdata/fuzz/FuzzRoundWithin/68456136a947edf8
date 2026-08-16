@@ -1,0 +1,6 @@
+go test fuzz v1
+int64(1002)
+int64(941)
+int64(1200)
+int64(100)
+int64(99)

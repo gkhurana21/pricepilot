@@ -1,0 +1,36 @@
+name: enforcer
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: enforcer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: vet
+        run: go vet ./...
+
+      # Runs the unit tests, the 200k-scenario property tests, and every fuzz
+      # input committed under testdata/ as regression cases.
+      - name: test
+        run: go test -race -count=1 ./...
+
+      # A short fuzz run on every push. New failures land in testdata/ as
+      # permanent regression cases rather than being rediscovered later.
+      - name: fuzz (smoke)
+        run: go test -run '^$' -fuzz=FuzzDecide -fuzztime=45s .
+
+      - name: fuzz rounding (smoke)
+        run: go test -run '^$' -fuzz=FuzzRoundWithin -fuzztime=30s .

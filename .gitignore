@@ -1,0 +1,9 @@
+# Go build output
+/demo
+*.test
+*.out
+
+# Fuzz cache — only testdata/fuzz corpus is tracked
+/fuzz-cache/
+
+.DS_Store

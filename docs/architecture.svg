@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 500" width="920" height="500" role="img"
+     aria-label="PricePilot architecture: an elasticity model proposes prices, a pure deterministic enforcer approves, clamps or rejects each one, and nothing applies without a snapshot.">
+  <defs>
+    <style>
+      .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+      .hd   { font-size: 11px; letter-spacing: 1.6px; fill: #7d8b95; }
+      .ttl  { font-size: 12px; fill: #8b98a3; }
+      .bd   { font-size: 12px; fill: #c9d4dd; }
+      .dim  { font-size: 11.5px; fill: #78868f; }
+      .acc  { font-size: 12px; fill: #3fb0a8; }
+      .accb { font-size: 12px; fill: #3fb0a8; font-weight: 600; }
+      .grn  { font-size: 12px; fill: #4dbb6e; }
+      .red  { font-size: 12px; fill: #e5645b; }
+      .num  { font-size: 15px; fill: #e6edf3; font-weight: 600; }
+      .lbl  { font-size: 10px; fill: #6f7d86; letter-spacing: .4px; }
+    </style>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3fb0a8"/>
+    </marker>
+  </defs>
+
+  <rect x="1" y="1" width="918" height="498" rx="10" fill="#0b1015" stroke="#1f2d33"/>
+  <path d="M1 39 H919" stroke="#1f2d33"/>
+  <circle cx="22" cy="20" r="4.5" fill="#e5645b"/>
+  <circle cx="38" cy="20" r="4.5" fill="#d8a657"/>
+  <circle cx="54" cy="20" r="4.5" fill="#4dbb6e"/>
+  <text class="mono ttl" x="76" y="24">pricepilot — a model proposes, the policy engine decides</text>
+
+  <!-- PROPOSER -->
+  <text class="mono hd" x="28" y="70">PROPOSER</text>
+  <rect x="24" y="82" width="252" height="212" rx="7" fill="#0e151b" stroke="#22323a"/>
+  <text class="mono bd"  x="40" y="108">elasticity model</text>
+  <text class="mono dim" x="40" y="129">log(units) ~ log(price)</text>
+  <text class="mono dim" x="40" y="147">+ promo, seasonality</text>
+  <text class="mono dim" x="40" y="165">pooled within collection</text>
+  <path d="M40 184 H260" stroke="#22323a"/>
+  <text class="mono acc" x="40" y="207">refuses when the data</text>
+  <text class="mono acc" x="40" y="225">cannot carry an answer</text>
+  <text class="mono dim" x="40" y="250">too few prices · interval</text>
+  <text class="mono dim" x="40" y="268">too wide · wrong sign</text>
+
+  <!-- ENFORCER -->
+  <text class="mono hd" x="338" y="70">ENFORCER</text>
+  <rect x="334" y="82" width="252" height="212" rx="7" fill="#0e151b" stroke="#3fb0a8" stroke-opacity=".45"/>
+  <text class="mono bd"  x="350" y="108">margin floor · MAP</text>
+  <text class="mono bd"  x="350" y="129">max Δ per cycle</text>
+  <text class="mono bd"  x="350" y="150">repricing velocity</text>
+  <text class="mono bd"  x="350" y="171">exclusions · rounding</text>
+  <path d="M350 190 H570" stroke="#22323a"/>
+  <text class="mono dim" x="350" y="212">no clock · no network</text>
+  <text class="mono dim" x="350" y="230">no randomness · no model</text>
+  <text class="mono accb" x="350" y="256">6 invariants, fuzz-proven</text>
+  <text class="mono dim" x="350" y="276">4.5M execs · 0 violations</text>
+
+  <!-- OUTCOME -->
+  <text class="mono hd" x="648" y="70">OUTCOME</text>
+  <rect x="644" y="82" width="252" height="212" rx="7" fill="#0e151b" stroke="#22323a"/>
+  <text class="mono grn" x="660" y="110">approve</text>
+  <text class="mono dim" x="660" y="128">cleared every rule</text>
+  <text class="mono acc" x="660" y="157">clamp</text>
+  <text class="mono dim" x="660" y="175">moved, and the binding</text>
+  <text class="mono dim" x="660" y="193">rule is named</text>
+  <text class="mono red" x="660" y="222">reject</text>
+  <text class="mono dim" x="660" y="240">with the reason why</text>
+  <path d="M660 258 H880" stroke="#22323a"/>
+  <text class="mono dim" x="660" y="278">preview → snapshot → apply</text>
+
+  <path d="M282 188 H328" stroke="#3fb0a8" stroke-width="1.4" marker-end="url(#ar)"/>
+  <path d="M592 188 H638" stroke="#3fb0a8" stroke-width="1.4" marker-end="url(#ar)"/>
+
+  <!-- funnel -->
+  <path d="M1 318 H919" stroke="#1f2d33"/>
+  <text class="mono hd" x="28" y="344">ONE RUN, MEASURED AGAINST KNOWN GROUND TRUTH</text>
+
+  <g transform="translate(28,366)">
+    <text class="mono num" x="0"   y="16">13</text><text class="mono lbl" x="0"   y="34">SKUs in</text>
+    <text class="mono dim" x="54"  y="16">&#8594;</text>
+    <text class="mono num" x="88"  y="16">11</text><text class="mono lbl" x="88"  y="34">estimable</text>
+    <text class="mono dim" x="170" y="16">&#8594;</text>
+    <text class="mono num" x="204" y="16">9</text> <text class="mono lbl" x="204" y="34">proposals</text>
+    <text class="mono dim" x="286" y="16">&#8594;</text>
+    <text class="mono num" x="320" y="16">8</text> <text class="mono lbl" x="320" y="34">applied</text>
+
+    <path d="M398 -6 V66" stroke="#22323a"/>
+
+    <text class="mono num" x="430" y="10">94.8%</text><text class="mono lbl" x="502" y="10">coverage on a stated 95% interval</text>
+    <text class="mono num" x="430" y="38">56%</text>  <text class="mono lbl" x="502" y="38">error cut, pooling sparse SKUs</text>
+    <text class="mono num" x="430" y="66">27%</text>  <text class="mono lbl" x="502" y="66">mispriced by a single omitted control</text>
+  </g>
+
+  <text class="mono lbl" x="28" y="482">five of thirteen SKUs produce nothing at all — on a real catalog that ratio is the product working, not failing</text>
+</svg>

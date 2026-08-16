@@ -2,18 +2,10 @@
 
 **An agentic repricing system for Shopify merchants, where a deterministic policy engine holds final authority over every price change.**
 
-```
-   order history            PRICING                  ENFORCER              APPLY
-  ─────────────────      ──────────────          ─────────────────      ──────────
-  units + prices  ─┐     elasticity model         ┌───────────────┐
-  promo calendar   ├──→  + pooling          ──→   │ margin floor  │ ──→  preview
-  seasonality      │     + optimal price          │ MAP / min-adv │      snapshot
-  unit costs      ─┘     (or refuses)             │ max Δ / cycle │      bulk apply
-                                                  │ velocity cap  │      rollback
-                                                  │ exclusions    │
-                                                  └───────────────┘
-                                                   approve │ clamp │ reject + reason
-```
+<p align="center">
+  <img src="docs/architecture.svg" alt="An elasticity model proposes prices; a pure deterministic enforcer approves, clamps, or rejects each one and names the binding rule; nothing applies without a snapshot." width="920">
+</p>
+
 
 Merchants are right to be afraid of an agent that changes prices. So the product is split in two, and the halves are held to different standards:
 

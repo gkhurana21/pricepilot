@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// checkInvariants asserts the six guarantees in the package doc against a single
+// checkInvariants asserts the seven invariants (the six in the package doc plus direction, number 7) against a single
 // decision. Every test in this package funnels through it — table tests, the
 // randomized property test, and the fuzzer — so a guarantee only has to be
 // stated once and no test can accidentally assert a weaker version of it.
@@ -93,7 +93,8 @@ func checkInvariants(t *testing.T, pol Policy, sku SKUState, prop Proposal, now 
 
 	// Velocity gates are absolute: a SKU repriced too recently gets no price.
 	if v := pol.Velocity; v.MinDaysBetweenChanges > 0 && !sku.LastPriceChangeAt.IsZero() {
-		if now.Before(sku.LastPriceChangeAt.AddDate(0, 0, v.MinDaysBetweenChanges)) {
+		// UTC, as in Decide: day arithmetic must not depend on the server's zone.
+		if now.UTC().Before(sku.LastPriceChangeAt.UTC().AddDate(0, 0, v.MinDaysBetweenChanges)) {
 			t.Fatalf("invariant violated: SKU repriced inside the %d-day cooldown", v.MinDaysBetweenChanges)
 		}
 	}
@@ -104,6 +105,14 @@ func checkInvariants(t *testing.T, pol Policy, sku SKUState, prop Proposal, now 
 	// A change that changes nothing is not a change.
 	if d.FinalPrice == sku.CurrentPrice {
 		t.Fatalf("invariant violated: action %q produced a no-op at %s", d.Action, d.FinalPrice)
+	}
+
+	// (7) Direction is respected: a proposed cut never becomes a rise and a
+	// proposed rise never becomes a cut. A proposal equal to the current price
+	// has no direction to respect, and must never produce a price at all.
+	if sign(d.FinalPrice-sku.CurrentPrice) != sign(prop.ProposedPrice-sku.CurrentPrice) {
+		t.Fatalf("invariant violated: proposed %s from current %s but final is %s (opposite direction)",
+			prop.ProposedPrice, sku.CurrentPrice, d.FinalPrice)
 	}
 
 	// Nor is a change too small to be worth applying.
@@ -123,4 +132,14 @@ func checkInvariants(t *testing.T, pol Policy, sku SKUState, prop Proposal, now 
 		t.Fatalf("invariant violated: approved price %s differs from proposal %s without a clamp",
 			d.FinalPrice, prop.ProposedPrice)
 	}
+}
+
+func sign(c Cents) int {
+	switch {
+	case c > 0:
+		return 1
+	case c < 0:
+		return -1
+	}
+	return 0
 }

@@ -192,7 +192,7 @@ func main() {
 	fmt.Printf("  of those applied, %d were held back by a guardrail and %d took the model's price\n",
 		held, s.Approved+s.Clamped-held)
 	if len(s.RejectedByRule) > 0 {
-		fmt.Printf("  held back by:")
+		fmt.Printf("  proposals refused outright, by rule:")
 		for _, rule := range sortedRules(s.RejectedByRule) {
 			fmt.Printf("  %s×%d", rule, s.RejectedByRule[rule])
 		}

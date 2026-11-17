@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// FuzzDecide attacks the six guarantees in the package doc with arbitrary
+// FuzzDecide attacks the seven invariants (see checkInvariants) with arbitrary
 // input. The engine performs no I/O and reads no clock, so a failing input is
 // a complete, permanently reproducible bug report — Go writes it to
 // testdata/fuzz/ and it becomes a regression test forever.

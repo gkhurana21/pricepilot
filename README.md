@@ -20,25 +20,29 @@ No statistical outcome, however extreme, can produce a price that violates the m
 go run ./cmd/pipeline
 ```
 
+Excerpts from its output (the catalog is synthetic and seeded, so every run prints the same thing):
+
 ```
+    9 proposals generated; 4 SKUs produced none
+
+      · Chemex Classic 6-cup         sold at 1 distinct price(s); elasticity needs at least 3
+      · Hario V60 Filters 100ct      sold at 2 distinct price(s); elasticity needs at least 3
+      · Signature Roast Mug          interval [-0.73, -0.38] reaches the inelastic region where no profit-maximising price exists
+      · Travel Tumbler 350ml         no unit cost on this variant, so there is no margin to optimise
+
   funnel:  13 SKUs  →  11 estimable  →  9 proposals  →  8 applied
   of those applied, 4 were held back by a guardrail and 4 took the model's price
-
-      · Chemex Classic 6-cup      sold at 1 distinct price; elasticity needs at least 3
-      · Hario V60 Filters 100ct   sold at 2 distinct prices; elasticity needs at least 3
-      · Signature Roast Mug       interval [-0.94, -0.58] reaches the inelastic region
-                                  where no profit-maximising price exists
-      · Travel Tumbler 350ml      no unit cost, so there is no margin to optimise
+  proposals refused outright, by rule:  infeasible_bounds×1
 ```
 
-Five of thirteen SKUs produce nothing at all. On a real catalog that ratio would be far higher, and it is the product working correctly rather than failing.
+Five of thirteen SKUs end with no price change: four never produce a proposal, and one proposal is a cut on a SKU already priced below its margin floor, which the enforcer refuses and reports. On a real catalog that ratio would be far higher, and it is the product working correctly rather than failing. "Applied" here means cleared for the merchant's preview; nothing in this repo writes to a store.
 
 ## What is actually proven
 
 | Claim | Evidence |
 |---|---|
-| The enforcer's six invariants hold on arbitrary input | 4.5M fuzz executions, 0 violations; 49 discovered corpus entries committed as regression cases |
-| Elasticity is recovered from data whose truth is known | 0.4%–6.7% error on well-identified SKUs |
+| The enforcer's seven invariants hold on every input the fuzzer tried | 74.4M fuzz executions in 10 minutes, 0 violations ([details](enforcer/README.md)); 49 discovered corpus entries committed as regression cases |
+| Elasticity is recovered from data whose truth is known | 2.0%–6.7% error across four known elasticities (`TestRecoversKnownElasticity`) |
 | The confidence intervals mean what they say | 94.8% coverage on a stated 95% interval, over 600 trials |
 | Pooling helps thin histories | 56% MSE reduction across 40 sparse SKUs |
 | Omitting a confounder has a price | one missing promo control underprices by 26.8% |

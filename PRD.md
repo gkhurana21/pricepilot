@@ -58,6 +58,7 @@ This is the core of the project and the reason it exists.
 - a SKU on the exclusion list is never modified
 - applying the full decision set never violates the velocity cap
 - every rejection carries a reason that names the rule it failed
+- a price that changes moves the way the proposal pointed, never the opposite way
 
 This is the same separation as [tradebot](https://github.com/gkhurana21/tradebot), where a Go risk engine retains final authority over an LLM's trade proposals. The lesson transfers directly: **the interesting engineering is the part that says no.**
 
@@ -103,11 +104,11 @@ The policy engine, standalone and fully tested, before any model exists.
 
 - Policy schema: margin floor (absolute or %), MAP price, max Δ% per cycle, min days between changes per SKU, collection/tag exclusions, rounding rules (.99, .95, whole)
 - `decide(proposal, policy, sku_state) → {action: approve|clamp|reject, final_price, reason, rule_id}`
-- Property-based tests (Hypothesis/fast-check) asserting the invariants in §3
+- Property-based tests and Go's native fuzzer asserting the invariants in §3
 - Golden-file tests for every rule and every interaction between rules
 
 **Exit:** the enforcer cannot be made to violate an invariant by any generated input.
-**Result:** 4.5M fuzz executions, 0 violations. 49 discovered corpus entries committed as regression cases. Two defects found by the tests: clamps naming the wrong binding rule, and a summary breakdown that undercounted.
+**Result:** 74.4M fuzz executions in 10 minutes, 0 violations (first measured as 4.5M in 40 seconds). 49 discovered corpus entries committed as regression cases. Two defects found by the tests: clamps naming the wrong binding rule, and a summary breakdown that undercounted. Two more found in review in November 2026, each now a test: a proposed cut could be clamped and rounded into a rise, and the velocity rule depended on the server's time zone.
 
 ### Phase 2 — demand signal + proposer (weeks 2–3) · **BUILT**
 - **Elasticity estimation** per product/collection from order history: log-log regression of quantity on price with controls, shrunk toward the collection mean when a SKU has thin data (hierarchical/partial pooling — the honest fix for sparse SKUs)
@@ -116,7 +117,7 @@ The policy engine, standalone and fully tested, before any model exists.
 - Proposal = the margin-optimal price under the estimated demand curve, then handed to the enforcer
 
 **Exit:** on synthetic data with known ground-truth elasticity, the estimator recovers β within ±15% and its confidence intervals are calibrated.
-**Result:** 0.4%–6.7% error on well-identified SKUs; 94.8% coverage on a stated 95% interval over 600 trials; 56% MSE reduction from pooling across 40 sparse SKUs. Two defects found: a zero-variance control column made X'X singular for every SKU that never went on promo, and catalog-wide pooling degraded well-identified SKUs until it was scoped to collections.
+**Result:** 2.0%–6.7% error across four known elasticities; 94.8% coverage on a stated 95% interval over 600 trials; 56% MSE reduction from pooling across 40 sparse SKUs. Two defects found: a zero-variance control column made X'X singular for every SKU that never went on promo, and catalog-wide pooling degraded well-identified SKUs until it was scoped to collections.
 
 ### Phase 3 — merchant app (weeks 4–5)
 Extends the existing BulkPilot codebase.
@@ -151,14 +152,16 @@ Extends the existing BulkPilot codebase.
 
 ## 8. Tech stack
 
-| Layer | Choice | Rationale |
-|---|---|---|
-| Shopify app | React Router 7, Polaris, App Bridge, Prisma | Already proven in BulkPilot; official embedded stack |
-| Enforcer | TypeScript, pure functions, property tests | Must run in-process, be trivially testable, have no I/O |
-| Estimation | Python, pandas, statsmodels/scikit-learn | Hierarchical regression, confidence intervals |
-| Serving | FastAPI | Estimation service the app calls; keeps ML out of the request path |
-| Data | Postgres (Prisma) | Runs, snapshots, policies, audit log |
-| CI | GitHub Actions | Enforcer property tests + app typecheck run on every push |
+| Layer | Choice | Status | Rationale |
+|---|---|---|---|
+| Enforcer | Go, pure functions, integer money, native fuzzing | Built | No I/O, so its guarantees can be tested on every input |
+| Estimation | Go, standard library only (own OLS and t-quantiles) | Built | One language and no dependencies between the model and the guardrail |
+| CI | GitHub Actions: gofmt, vet, race tests, a short fuzz run | Built | The committed fuzz corpus runs as regression cases on every push |
+| Shopify app | React Router 7, Polaris, App Bridge, Prisma | Phase 3, not built | Already proven in BulkPilot; the official embedded stack |
+| App to engine | To be settled in the phase 3 plan | Phase 3, not built | The app must run the same Go source that was fuzzed, not a port |
+| Data | Prisma (SQLite in BulkPilot today) | Phase 3, not built | Runs, snapshots, policies, audit log |
+
+v1.0 of this document planned a TypeScript enforcer and a Python estimation service. Both were built in Go instead.
 
 ---
 

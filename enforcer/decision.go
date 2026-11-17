@@ -28,12 +28,15 @@ const (
 	RuleHardCeiling   RuleID = "hard_ceiling"
 	RuleMaxDecrease   RuleID = "max_decrease"
 	RuleMaxIncrease   RuleID = "max_increase"
-	RuleRounding      RuleID = "rounding"
-	RuleInfeasible    RuleID = "infeasible_bounds"
-	RuleNoChange      RuleID = "no_change"
-	RuleMinChange     RuleID = "min_change"
-	RuleInvalidInput  RuleID = "invalid_input"
-	RuleBatchBudget   RuleID = "batch_change_budget"
+	// RuleProposalDirection is the bound a proposal's own direction imposes: a
+	// cut may not land above the current price, a rise may not land below it.
+	RuleProposalDirection RuleID = "proposal_direction"
+	RuleRounding          RuleID = "rounding"
+	RuleInfeasible        RuleID = "infeasible_bounds"
+	RuleNoChange          RuleID = "no_change"
+	RuleMinChange         RuleID = "min_change"
+	RuleInvalidInput      RuleID = "invalid_input"
+	RuleBatchBudget       RuleID = "batch_change_budget"
 )
 
 // Effect describes what a rule did, so the UI can style a blocking rule

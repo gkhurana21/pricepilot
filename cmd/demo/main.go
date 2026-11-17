@@ -63,8 +63,11 @@ func main() {
 			"no signal to move"),
 		item("Guatemala Antigua 250g", 2100, 1450, 0, nil, 0, time.Time{}, 1750, 8900,
 			"clearing remaining lot"),
-		item("Travel Tumbler 350ml", 3200, 2600, 0, nil, 0, time.Time{}, 2900, 7800,
-			"slow mover, thin margin"),
+		// A rise the policy cannot fit in one cycle: the margin floor wants
+		// more than the per-cycle cap allows, so the engine says how many
+		// cycles it would take instead of picking a winner.
+		item("Travel Tumbler 350ml", 3200, 2600, 0, nil, 0, time.Time{}, 3600, 7800,
+			"thin margin; cost rose last quarter"),
 		item("Decaf Swiss Water 250g", 2300, 1150, 0, nil, 0, time.Time{}, 2050, 9600,
 			"steady demand, room to optimise"),
 	}
@@ -87,7 +90,7 @@ func main() {
 
 	s := res.Summary
 	fmt.Println("  " + strings.Repeat("─", 96))
-	fmt.Printf("  %d proposals  ·  %d approved  ·  %d adjusted  ·  %d held back  (%d increases, %d decreases)\n",
+	fmt.Printf("  %d proposals  ·  %d approved  ·  %d adjusted  ·  %d held back  (%d up, %d down)\n",
 		s.Total, s.Approved, s.Clamped, s.Rejected, s.Increases, s.Decreases)
 	if len(s.RejectedByRule) > 0 {
 		fmt.Printf("  held back by:")

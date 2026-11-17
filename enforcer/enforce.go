@@ -14,6 +14,8 @@
 //  4. An excluded SKU is never assigned a price.
 //  5. FinalPrice is non-zero if and only if the action is not reject.
 //  6. Every non-approval names the rule responsible.
+//  7. An approved price moves in the direction that was proposed: a proposed cut
+//     never becomes a rise, a proposed rise never becomes a cut.
 //
 // Where a rule cannot be evaluated, the engine fails closed: a margin floor
 // with no unit cost rejects rather than silently skipping the floor. Silently
@@ -57,12 +59,18 @@ func Decide(pol Policy, sku SKUState, prop Proposal, now time.Time) Decision {
 				prop.ConfidenceBP, pol.MinConfidenceBP))
 	}
 
+	// Day arithmetic is done in UTC. AddDate on a time in a zone with daylight
+	// saving moves the wall clock, so "14 days" would be 14*24h plus or minus an
+	// hour depending on the server's zone and the date. A timestamp decoded
+	// from JSON carries time.Local when its offset matches the server's, which
+	// is exactly how the same instant could decide differently on two machines.
 	if v := pol.Velocity; v.MinDaysBetweenChanges > 0 && !sku.LastPriceChangeAt.IsZero() {
-		earliest := sku.LastPriceChangeAt.AddDate(0, 0, v.MinDaysBetweenChanges)
-		if now.Before(earliest) {
+		last := sku.LastPriceChangeAt.UTC()
+		earliest := last.AddDate(0, 0, v.MinDaysBetweenChanges)
+		if now.UTC().Before(earliest) {
 			return reject(&d, RuleVelocityDays, EffectBlocked,
 				fmt.Sprintf("last repriced %s; policy requires %d days between changes (next eligible %s)",
-					sku.LastPriceChangeAt.Format(time.DateOnly), v.MinDaysBetweenChanges,
+					last.Format(time.DateOnly), v.MinDaysBetweenChanges,
 					earliest.Format(time.DateOnly)))
 		}
 	}
@@ -132,19 +140,50 @@ func Decide(pol Policy, sku SKUState, prop Proposal, now time.Time) Decision {
 				pol.MaxIncreaseBP, maxByChange))
 	}
 
+	// The direction of the proposal is itself a bound: a proposed cut may land
+	// anywhere at or below the current price, a proposed rise anywhere at or
+	// above it, and a proposal equal to the current price only on it. Applied
+	// after every other bound and before rounding, so rounding searches only
+	// the permitted side and stands down when no permitted ending fits.
+	dir := directionWord(prop.ProposedPrice, sku.CurrentPrice)
+	if prop.ProposedPrice <= sku.CurrentPrice && sku.CurrentPrice < hi {
+		hi, hiRule = sku.CurrentPrice, RuleProposalDirection
+		d.add(RuleProposalDirection, EffectBound,
+			fmt.Sprintf("a %s proposal holds price at or below the current %s", dir, sku.CurrentPrice))
+	}
+	if prop.ProposedPrice >= sku.CurrentPrice && sku.CurrentPrice > lo {
+		lo, loRule = sku.CurrentPrice, RuleProposalDirection
+		d.add(RuleProposalDirection, EffectBound,
+			fmt.Sprintf("a %s proposal holds price at or above the current %s", dir, sku.CurrentPrice))
+	}
+
 	d.LowerBound, d.UpperBound = lo, hi
 
 	// Contradictory guardrails are the merchant's to resolve, not the engine's
 	// to quietly pick a winner from. Name both sides and refuse.
 	if lo > hi {
-		msg := fmt.Sprintf("policy leaves no admissible price: %s sets a floor of %s but %s sets a ceiling of %s",
-			loRule, lo, hiRule, hi)
-		// A dead end is more useful with a way out of it. When the ceiling is
-		// the per-cycle cap, the floor is usually reachable over several runs.
-		if hiRule == RuleMaxIncrease {
-			if n, ok := cyclesToReach(sku.CurrentPrice, lo, pol.MaxIncreaseBP); ok {
-				msg += fmt.Sprintf("; %s is reachable in %d cycles at the current %s cap",
-					lo, n, pol.MaxIncreaseBP)
+		var msg string
+		switch {
+		case hiRule == RuleProposalDirection:
+			// The price is already outside a rule the proposal cannot fix: the
+			// engine will not push it back up while the model asked to cut it.
+			msg = fmt.Sprintf("the current price %s is below the floor of %s set by %s, so a %s proposal cannot be applied; "+
+				"raise the price to the floor or relax %s",
+				sku.CurrentPrice, lo, loRule, directionWord(prop.ProposedPrice, sku.CurrentPrice), loRule)
+		case loRule == RuleProposalDirection:
+			msg = fmt.Sprintf("the current price %s is above the ceiling of %s set by %s, so a %s proposal cannot be applied; "+
+				"lower the price to the ceiling or relax %s",
+				sku.CurrentPrice, hi, hiRule, directionWord(prop.ProposedPrice, sku.CurrentPrice), hiRule)
+		default:
+			msg = fmt.Sprintf("policy leaves no admissible price: %s sets a floor of %s but %s sets a ceiling of %s",
+				loRule, lo, hiRule, hi)
+			// A dead end is more useful with a way out of it. When the ceiling is
+			// the per-cycle cap, the floor is usually reachable over several runs.
+			if hiRule == RuleMaxIncrease {
+				if n, ok := cyclesToReach(sku.CurrentPrice, lo, pol.MaxIncreaseBP); ok {
+					msg += fmt.Sprintf("; %s is reachable in %d cycles at the current %s cap",
+						lo, n, pol.MaxIncreaseBP)
+				}
 			}
 		}
 		return reject(&d, RuleInfeasible, EffectBlocked, msg)
@@ -201,6 +240,17 @@ func Decide(pol Policy, sku SKUState, prop Proposal, now time.Time) Decision {
 		d.Action = ActionApprove
 	}
 	return d
+}
+
+// directionWord names the proposal's direction for a message.
+func directionWord(proposed, current Cents) string {
+	switch {
+	case proposed < current:
+		return "decrease"
+	case proposed > current:
+		return "increase"
+	}
+	return "no-change"
 }
 
 func reject(d *Decision, rule RuleID, eff Effect, msg string) Decision {

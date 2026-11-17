@@ -14,12 +14,19 @@ func TestInvariantsUnderRandomInput(t *testing.T) {
 	rng := rand.New(rand.NewSource(20260816))
 	buf := make([]byte, 96)
 
-	var approved, clamped, rejected int
+	var approved, clamped, rejected, belowFloor, belowFloorInfeasible int
 	for i := 0; i < cases; i++ {
 		rng.Read(buf)
 		pol, state, prop, now := decodeScenario(buf)
 		d := Decide(pol, state, prop, now)
 		checkInvariants(t, pol, state, prop, now, d)
+
+		if pol.ID == belowFloorID {
+			belowFloor++
+			if hasRule(d, RuleInfeasible) {
+				belowFloorInfeasible++
+			}
+		}
 
 		switch d.Action {
 		case ActionApprove:
@@ -31,7 +38,8 @@ func TestInvariantsUnderRandomInput(t *testing.T) {
 		}
 	}
 
-	t.Logf("%d scenarios: %d approved, %d clamped, %d rejected", cases, approved, clamped, rejected)
+	t.Logf("%d scenarios: %d approved, %d clamped, %d rejected; %d started below a lower bound (%d of them infeasible)",
+		cases, approved, clamped, rejected, belowFloor, belowFloorInfeasible)
 
 	// A sample that never produces a price would pass every invariant while
 	// testing nothing. Guard against the test silently going hollow.
@@ -40,6 +48,10 @@ func TestInvariantsUnderRandomInput(t *testing.T) {
 	}
 	if rejected == 0 {
 		t.Fatal("no scenario was rejected; the generator is not exercising the guardrails")
+	}
+	if belowFloor == 0 || belowFloorInfeasible == 0 {
+		t.Fatalf("below-floor scenarios: %d generated, %d infeasible; the generator never reaches a current price below its floor",
+			belowFloor, belowFloorInfeasible)
 	}
 }
 

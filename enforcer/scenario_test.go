@@ -83,7 +83,13 @@ func (r *reader) between(lo, hi int64) int64 {
 
 var fuzzTags = []string{"", "clearance", "do-not-reprice", "new", "bundle"}
 
-// decodeScenario builds a scenario in one of two modes.
+// decodeScenario builds a scenario in one of three modes.
+//
+// Below-floor mode starts from a realistic scenario and then makes the current
+// price violate a lower bound (a margin floor above the price, or MAP above
+// it). Real catalogs get there when costs rise or a supplier raises MAP, and
+// realisticScenario cannot reach it because it derives cost and floors from
+// the price. About one scenario in sixteen is below-floor.
 //
 // Hostile mode produces nonsense — negative rates, impossible margin floors,
 // contradictory bounds — and proves the engine refuses to emit a price.
@@ -96,10 +102,50 @@ var fuzzTags = []string{"", "clearance", "do-not-reprice", "new", "bundle"}
 // a hostile-only corpus would look thorough while barely testing them.
 func decodeScenario(data []byte) (Policy, SKUState, Proposal, time.Time) {
 	r := &reader{b: data}
-	if r.byteAt()%4 == 0 {
+	switch first := r.byteAt(); {
+	case first%4 == 0:
 		return hostileScenario(r)
+	case first%16 == 1:
+		return belowFloorScenario(r)
 	}
 	return realisticScenario(r)
+}
+
+// belowFloorID marks scenarios from belowFloorScenario so a test can count them.
+const belowFloorID = "below_floor"
+
+// belowFloorScenario is a realistic scenario whose current price is already
+// below an active lower bound. The proposal is a cut, a rise, or exactly the
+// current price, so each direction meets the bound.
+func belowFloorScenario(r *reader) (Policy, SKUState, Proposal, time.Time) {
+	pol, state, prop, now := realisticScenario(r)
+	pol.ID = belowFloorID
+	cur := int64(state.CurrentPrice)
+
+	switch r.byteAt() % 4 {
+	case 0: // absolute margin floor above the price
+		pol.MarginFloor = MarginFloor{AbsoluteFloor: Cents(cur + r.between(1, cur/2+1))}
+	case 1: // cost close to price with a gross margin floor: floor > 1.43 * cost > price
+		state.UnitCost = Cents(cur * r.between(80, 99) / 100)
+		pol.MarginFloor = MarginFloor{Basis: MarginOnPrice, Rate: BasisPoints(r.between(3000, 4500))}
+	case 2: // markup floor: floor >= 1.5 * cost > price
+		state.UnitCost = Cents(cur * r.between(70, 99) / 100)
+		pol.MarginFloor = MarginFloor{Basis: MarginOnCost, Rate: BasisPoints(r.between(5000, 8000))}
+	case 3: // MAP above the price
+		pol.RespectMAP = true
+		state.MAPPrice = Cents(cur * r.between(101, 130) / 100)
+	}
+
+	switch r.byteAt() % 3 {
+	case 0:
+		prop.ProposedPrice = state.CurrentPrice
+	case 1:
+		prop.ProposedPrice = Cents(cur * r.between(40, 99) / 100)
+	}
+	if prop.ProposedPrice <= 0 {
+		prop.ProposedPrice = 1
+	}
+	return pol, state, prop, now
 }
 
 // realisticScenario derives every field from the ones before it, the way a real

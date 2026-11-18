@@ -298,14 +298,14 @@
       "products": 13,
       "estimated": 11,
       "proposals": 9,
-      "price_changes": 6,
+      "price_changes": 5,
       "approved": 0,
-      "clamped": 6,
-      "rejected": 3,
+      "clamped": 5,
+      "rejected": 4,
       "rejected_by_rule": {
         "excluded": 1,
         "infeasible_bounds": 1,
-        "min_change": 1
+        "min_change": 2
       },
       "policy_hash": "sha256:952a2763335eadb8"
     },
@@ -380,7 +380,7 @@
       },
       {
         "handle": "guatemala-antigua-250g",
-        "outcome": "clamp: price change",
+        "outcome": "rejected: min_change",
         "method": "pooled",
         "refusal": "",
         "elasticity": -2.2897,
@@ -390,10 +390,10 @@
         "proposal_price_cents": 1740,
         "no_proposal_reason": "",
         "no_proposal_code": "",
-        "decision_action": "clamp",
+        "decision_action": "reject",
         "current_price_cents": 1800,
-        "final_price_cents": 1699,
-        "deciding_rule": "rounding"
+        "final_price_cents": null,
+        "deciding_rule": "min_change"
       },
       {
         "handle": "sumatra-mandheling-250g",
@@ -426,7 +426,7 @@
         "no_proposal_code": "",
         "decision_action": "clamp",
         "current_price_cents": 1900,
-        "final_price_cents": 1699,
+        "final_price_cents": 1799,
         "deciding_rule": "rounding"
       },
       {

@@ -34,17 +34,17 @@ That purity is what turns the safety story from a claim into a property a fuzzer
 4. An excluded SKU is never assigned a price.
 5. `FinalPrice` is non-zero if and only if the action is not `reject`.
 6. Every non-approval names the rule responsible.
-7. A price that changes moves the way the proposal pointed: a proposed cut never becomes a rise, and a proposed rise never becomes a cut.
+7. A price that changes lands between the current price and the proposal: on the proposal's side, and never past it.
 
 All seven live in one function, [`checkInvariants`](invariants_test.go). The table tests, the randomized property test, and both fuzzers funnel through it, so a guarantee is stated once and no test can quietly assert a weaker version of it.
 
 ```
 go test -run '^$' -fuzz=FuzzDecide -fuzztime=10m
-fuzz: elapsed: 10m0s, execs: 74413440 (111164/sec), new interesting: 5 (total: 299)
+fuzz: elapsed: 10m0s, execs: 62464769 (120335/sec), new interesting: 4 (total: 303)
 PASS
 ```
 
-74.4M executions in ten minutes on an Apple M3 (Go 1.26.5, 8 workers), zero invariant violations, run on 2026-11-17 (UTC) against the seven-invariant code. An execution count mostly measures time spent: the same machine does about 4.5M in 40 seconds, and new coverage is rare after the first few seconds. The stronger evidence is what is checked on every input and the 49 corpus entries the fuzzer discovered, which are committed under `testdata/` and run as regression cases on every plain `go test` — no one has to remember to launch the fuzzer.
+62.5M executions in ten minutes on an Apple M3 (Go 1.26.5, 8 workers, with other work running on the machine), zero invariant violations, run on 2026-11-18 (UTC) against the current seven-invariant code. An earlier ten-minute run, before the proposal became the far limit, did 74.4M with the same result. An execution count mostly measures time spent: the same machine does about 4.5M in 40 seconds, and new coverage is rare after the first few seconds. The stronger evidence is what is checked on every input and the 49 corpus entries the fuzzer discovered, which are committed under `testdata/` and run as regression cases on every plain `go test` — no one has to remember to launch the fuzzer.
 
 ## Design decisions worth defending
 
@@ -52,9 +52,11 @@ PASS
 
 **Money is never a float.** All amounts are `Cents` (int64), all rates are `BasisPoints` (10000 = 100%). Integer division always rounds in the tightening direction — lower bounds round up, upper bounds round down — so no bound is ever relaxed by a cent through arithmetic.
 
-**Rounding is a constrained search, not a post-hoc transform.** This is the subtlest rule here. Applied naively last, `.99` rounding takes a $10.02 price sitting on a $10.00 margin floor and ships $9.99 — undoing every check that came before it. `roundWithin` may only select values the bounds already permit, and stands down entirely when no permitted ending exists, because a correct price beats a pretty one.
+**Rounding is a constrained search, not a post-hoc transform.** This is the subtlest rule here. Applied naively last, `.99` rounding takes a $10.02 price sitting on a $10.00 margin floor and ships $9.99 — undoing every check that came before it. `roundWithin` may only select values the bounds already permit, and stands down entirely when no permitted ending exists, because a correct price beats a pretty one. The price ending is a preference, not a guarantee: a run can write $17.25 in a `.99` store when no `.99` price fits.
 
 **The proposal's direction is a bound.** The seventh invariant was added after reading this package's own demo. The model proposed cutting a $18.00 bag to $14.00; the margin floor sat at exactly $18.00, so the clamp held the price, and then `.99` rounding moved it up to $18.99. A proposed 22% cut was shown to the merchant as a 5.5% rise labelled "adjusted", and nothing forbade it: about 0.5% of priced decisions in the random suite reversed this way. A cut now caps the admissible range at the current price and a rise floors it there, before rounding runs, so rounding can only search the side the model asked for. When the current price is already below a floor and the model asks to cut, the engine refuses and says the price is below the floor; it does not raise a price nobody proposed raising.
+
+**The proposal is the far limit.** Fixing the reversal left its mirror image. With `.99` endings, a proposal to cut $19.00 to $17.45 came out as $16.99, because that was the nearest permitted ending and every rule allowed it; with $5 endings under a 35% cap, an 8% proposed cut became a 30.8% cut. Each guardrail was satisfied and the engine had still made a change larger than anyone asked for. Rounding now searches only between the clamped proposal and the current price, so $17.45 becomes $17.99. The same limit applies to bounds: if the current price is below a floor and the proposal rises toward it without reaching it, the engine refuses and names the floor; it does not jump past the proposal to get there. A guardrail can hold a change back. Nothing here can make one bigger.
 
 **The velocity rule counts days in UTC.** `AddDate` works on the wall clock, and a timestamp decoded from JSON picks up the server's zone, so a 14-day cooldown that spanned a daylight-saving change decided differently on a laptop in Toronto and a server in UTC. The fuzzer could not see it because its clock was always UTC. The test now sets the local zone to one with daylight saving and requires the same decisions as UTC.
 
@@ -78,14 +80,14 @@ PASS
 | `TestRaisingTheMarginFloorNeverLowersThePrice` | A stricter policy never produces a worse outcome |
 | `TestMarginFloorArithmetic` | 40% gross margin on $10.00 cost is $16.67; the same numbers as *markup* are $14.00 |
 | `TestSummaryReconciles` | Every figure a merchant can add up themselves does add up, across 2k random batches |
-| `TestProposalDirectionIsABound` | A cut is never rounded or clamped into a rise; a cut on a SKU already below its floor is refused with the floor named |
+| `TestProposalDirectionIsABound` | A cut is never rounded or clamped into a rise, and never rounded past the proposal; a cut on a SKU already below its floor is refused with the floor named |
 | `TestVelocityDoesNotDependOnTheServerTimeZone` | Cooldowns across a daylight-saving change decide the same in Toronto as in UTC |
 | `FuzzDecide` | All seven invariants plus determinism, under arbitrary input |
 | `FuzzRoundWithin` | Rounding lands on the pattern, inside the interval, and at the nearest permitted value |
 
 The fuzzers and the invariants cover `Decide`, one SKU at a time. `DecideBatch` and its change budget are covered by table tests and `TestSummaryReconciles`, not by the fuzzer.
 
-The scenario generator runs in three modes on purpose. A purely hostile generator rejected 99.9% of inputs — every invariant passed while the margin, MAP, and cap rules were barely reached, because those only matter on the approve and clamp paths. It now produces hostile input a quarter of the time, coherent merchant configurations about 69% of the time, and for one scenario in sixteen a SKU whose current price is already below its floor, which is where the direction rule earns its place. 37% of scenarios reach a real price.
+The scenario generator runs in three modes on purpose. A purely hostile generator rejected 99.9% of inputs — every invariant passed while the margin, MAP, and cap rules were barely reached, because those only matter on the approve and clamp paths. It now produces hostile input a quarter of the time, coherent merchant configurations about 69% of the time, and for one scenario in sixteen a SKU whose current price is already below its floor, which is where the direction rule earns its place. 36% of scenarios reach a real price.
 
 ## Run it
 
@@ -103,11 +105,11 @@ The demo opens with the changes that were *refused*, because that is the part wo
 
     Colombia Huila 250g             18.00  →  no change 
       → proposed 14.00 raised to 18.00 by the binding lower bound
-      · no price ending permitted by the rounding rule fits inside the admissible range; keeping the exact price
+      · no price ending permitted by the rounding rule lies between the proposal and the current price; keeping the exact price
       · compliant price equals the current price 18.00; nothing to apply
     Chemex Classic 6-cup            52.00  →  no change 
       → proposed 42.00 raised to 51.67 by the binding lower bound
-      → rounded 51.67 to 51.99 within the admissible range
+      → rounded 51.67 to 51.99, the nearest permitted ending that does not go past the proposal
       · 52.00 to 51.99 is a -0.02% move, below the 2.00% worth applying
     Baratza Encore Grinder         179.00  →  no change 
       × the current price 179.00 is below the floor of 208.34 set by margin_floor, so a decrease proposal cannot be applied; raise the price to the floor or relax margin_floor
@@ -121,6 +123,6 @@ The demo opens with the changes that were *refused*, because that is the part wo
 
 ## Scope
 
-This package decides. It does not estimate demand, call the Shopify API, or store anything — those live in the wider [PricePilot](../PRD.md) project, which extends an existing embedded Shopify app for OAuth, `productVariantsBulkUpdate` chunking, and snapshot rollback.
+This package decides. It does not estimate demand, call the Shopify API, or store anything — those live in [`pricing/`](../pricing) and in the [Shopify app](../shopify-app), which calls this package through [`bridge/`](../bridge) and writes only the prices it returns.
 
 **Elasticity estimation is not solved here and is not claimed to be.** Estimating it needs real order history, which a portfolio project does not have. The PRD's answer is synthetic order generation from a known demand curve — the only setting where an estimator can be *proven* to recover ground truth — paired with a dev-store integration for the real API path. No revenue-lift number appears anywhere in this project, because proving lift requires a live A/B on a real store.

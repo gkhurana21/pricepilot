@@ -7,11 +7,11 @@
 
     Colombia Huila 250g             18.00  →  no change 
       → proposed 14.00 raised to 18.00 by the binding lower bound
-      · no price ending permitted by the rounding rule fits inside the admissible range; keeping the exact price
+      · no price ending permitted by the rounding rule lies between the proposal and the current price; keeping the exact price
       · compliant price equals the current price 18.00; nothing to apply
     Chemex Classic 6-cup            52.00  →  no change 
       → proposed 42.00 raised to 51.67 by the binding lower bound
-      → rounded 51.67 to 51.99 within the admissible range
+      → rounded 51.67 to 51.99, the nearest permitted ending that does not go past the proposal
       · 52.00 to 51.99 is a -0.02% move, below the 2.00% worth applying
     Baratza Encore Grinder         179.00  →  no change 
       × the current price 179.00 is below the floor of 208.34 set by margin_floor, so a decrease proposal cannot be applied; raise the price to the floor or relax margin_floor
@@ -22,7 +22,7 @@
     Cold Brew Concentrate           15.00  →  no change 
       × confidence 42.00% is below the 60.00% minimum; no change proposed
     Hario V60 Filters 100ct         12.00  →  no change 
-      · no price ending permitted by the rounding rule fits inside the admissible range; keeping the exact price
+      · no price ending permitted by the rounding rule lies between the proposal and the current price; keeping the exact price
       · compliant price equals the current price 12.00; nothing to apply
     Guatemala Antigua 250g          21.00  →  no change 
       × the current price 21.00 is below the floor of 24.17 set by margin_floor, so a decrease proposal cannot be applied; raise the price to the floor or relax margin_floor
@@ -33,9 +33,9 @@
 
     Bramble House Blend 1kg         48.00  →  51.99     +8.32%   margin 53.8%
       → proposed 54.00 lowered to 52.80 by the binding upper bound
-      → rounded 52.80 to 51.99 within the admissible range
+      → rounded 52.80 to 51.99, the nearest permitted ending that does not go past the proposal
     Decaf Swiss Water 250g          23.00  →  20.99     -8.74%   margin 45.2%
-      → rounded 20.50 to 20.99 within the admissible range
+      → rounded 20.50 to 20.99, the nearest permitted ending that does not go past the proposal
 
   APPROVED — cleared every guardrail unchanged
 

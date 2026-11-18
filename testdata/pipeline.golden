@@ -35,12 +35,12 @@
 
     Ethiopia Yirgacheffe 250g       16.20  →  no change  16.20 to 15.99 is a -1.30% move, below the 2.00% worth applying
     Colombia Huila 250g             18.00  →  19.99      +11.06%   margin 50.0%   model's price
-    Kenya Nyeri AA 250g             17.80  →  16.99       -4.56%   margin 35.2%   model's price
+    Kenya Nyeri AA 250g             17.80  →  17.25       -3.09%   margin 36.2%   model's price
     Decaf Swiss Water 250g          23.00  →  19.99      -13.09%   margin 47.5%   held by max_decrease
     Bramble House Blend 1kg         33.50  →  no change  the current price 33.50 is below the floor of 33.85 set by margin_floor, so a decrease proposal cannot be applied; raise the price to the floor or relax margin_floor
-    Guatemala Antigua 250g          21.00  →  17.99      -14.34%   margin 45.5%   model's price
+    Guatemala Antigua 250g          21.00  →  18.99       -9.58%   margin 48.4%   model's price
     Brazil Cerrado 250g             19.00  →  16.99      -10.58%   margin 48.2%   held by max_decrease
-    Sumatra Mandheling 250g         22.50  →  19.99      -11.16%   margin 49.0%   model's price
+    Sumatra Mandheling 250g         22.50  →  20.99       -6.72%   margin 51.4%   model's price
     Peru Cajamarca 250g             20.00  →  17.99      -10.05%   margin 47.7%   model's price
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────

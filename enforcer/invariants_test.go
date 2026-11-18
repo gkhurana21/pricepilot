@@ -107,11 +107,19 @@ func checkInvariants(t *testing.T, pol Policy, sku SKUState, prop Proposal, now 
 		t.Fatalf("invariant violated: action %q produced a no-op at %s", d.Action, d.FinalPrice)
 	}
 
-	// (7) Direction is respected: a proposed cut never becomes a rise and a
-	// proposed rise never becomes a cut. A proposal equal to the current price
-	// has no direction to respect, and must never produce a price at all.
+	// (7) The final price lies between the current price and the proposal: on
+	// the proposal's side of the current price, and never past the proposal. A
+	// guardrail may hold a change back; nothing in the engine may make it
+	// larger than the model asked for, or point it the other way. A proposal
+	// equal to the current price has no room at all and must never produce a
+	// price.
 	if sign(d.FinalPrice-sku.CurrentPrice) != sign(prop.ProposedPrice-sku.CurrentPrice) {
 		t.Fatalf("invariant violated: proposed %s from current %s but final is %s (opposite direction)",
+			prop.ProposedPrice, sku.CurrentPrice, d.FinalPrice)
+	}
+	if (prop.ProposedPrice < sku.CurrentPrice && d.FinalPrice < prop.ProposedPrice) ||
+		(prop.ProposedPrice > sku.CurrentPrice && d.FinalPrice > prop.ProposedPrice) {
+		t.Fatalf("invariant violated: proposed %s from current %s but final is %s (past the proposal)",
 			prop.ProposedPrice, sku.CurrentPrice, d.FinalPrice)
 	}
 

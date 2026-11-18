@@ -14,8 +14,10 @@
 //  4. An excluded SKU is never assigned a price.
 //  5. FinalPrice is non-zero if and only if the action is not reject.
 //  6. Every non-approval names the rule responsible.
-//  7. An approved price moves in the direction that was proposed: a proposed cut
-//     never becomes a rise, a proposed rise never becomes a cut.
+//  7. A price that changes lands between the current price and the proposal:
+//     on the proposal's side, and never past it. A guardrail may hold a change
+//     back; nothing here makes it larger than was asked or points it the other
+//     way.
 //
 // Where a rule cannot be evaluated, the engine fails closed: a margin floor
 // with no unit cost rejects rather than silently skipping the floor. Silently
@@ -189,6 +191,24 @@ func Decide(pol Policy, sku SKUState, prop Proposal, now time.Time) Decision {
 		return reject(&d, RuleInfeasible, EffectBlocked, msg)
 	}
 
+	// The proposal is the far limit of any change. When the current price is
+	// already outside a bound and the proposal moves toward it without reaching
+	// it, the only compliant prices lie past the proposal. Clamping there would
+	// make a larger move than the model's evidence supports, so the engine
+	// refuses and names the bound instead.
+	if prop.ProposedPrice > sku.CurrentPrice && lo > prop.ProposedPrice {
+		return reject(&d, RuleInfeasible, EffectBlocked, fmt.Sprintf(
+			"the proposed %s does not reach the floor of %s set by %s, and the engine does not raise a price further than proposed; "+
+				"raise the price to the floor or relax %s",
+			prop.ProposedPrice, lo, loRule, loRule))
+	}
+	if prop.ProposedPrice < sku.CurrentPrice && hi < prop.ProposedPrice {
+		return reject(&d, RuleInfeasible, EffectBlocked, fmt.Sprintf(
+			"the proposed %s does not come down to the ceiling of %s set by %s, and the engine does not cut a price further than proposed; "+
+				"lower the price to the ceiling or relax %s",
+			prop.ProposedPrice, hi, hiRule, hiRule))
+	}
+
 	// ---- Clamp, then round inside the interval. ----------------------------
 
 	final := prop.ProposedPrice
@@ -204,15 +224,29 @@ func Decide(pol Policy, sku SKUState, prop Proposal, now time.Time) Decision {
 	}
 
 	if pol.Rounding.Enabled {
-		rounded, ok := roundWithin(final, lo, hi, pol.Rounding)
+		// Rounding may tidy the ending; it may not go past what was asked. The
+		// search is confined to the stretch between the clamped proposal and
+		// the current price, so the result is the permitted ending nearest the
+		// proposal on the cautious side of it. Left to search the whole
+		// admissible range, a $5-ending rule under a 35% cap turned an 8%
+		// proposed cut into a 30.8% cut: every rule satisfied, and a change
+		// nobody asked for.
+		rlo, rhi := lo, hi
+		switch {
+		case prop.ProposedPrice < sku.CurrentPrice:
+			rlo = final
+		case prop.ProposedPrice > sku.CurrentPrice:
+			rhi = final
+		}
+		rounded, ok := roundWithin(final, rlo, rhi, pol.Rounding)
 		switch {
 		case ok && rounded != final:
 			d.add(RuleRounding, EffectClamped,
-				fmt.Sprintf("rounded %s to %s within the admissible range", final, rounded))
+				fmt.Sprintf("rounded %s to %s, the nearest permitted ending that does not go past the proposal", final, rounded))
 			final, clamped = rounded, true
 		case !ok:
 			d.add(RuleRounding, EffectInfo,
-				"no price ending permitted by the rounding rule fits inside the admissible range; keeping the exact price")
+				"no price ending permitted by the rounding rule lies between the proposal and the current price; keeping the exact price")
 		}
 	}
 

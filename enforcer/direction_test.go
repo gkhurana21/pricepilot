@@ -58,8 +58,10 @@ func TestProposalDirectionIsABound(t *testing.T) {
 			wantRule:   RuleRounding, // stood down: no $5 ending lies at or below the current price
 		},
 		{
-			// A1b (owner decision pending): rounding may currently go further than the proposal.
-			name: "PIN OF OPEN OWNER DECISION A1b: cut of 8% rounds to a 30.8% cut at a 35% cap",
+			// With a 35% cap the admissible range reaches 10.00, and rounding used
+			// to take it: an 8% proposed cut became a 30.8% cut. Rounding may tidy
+			// an ending but never go further than the model asked.
+			name: "rounding never cuts further than the proposal, however wide the cap",
 			policy: func(p Policy) Policy {
 				p.MaxDecreaseBP = 3500
 				p.MaxIncreaseBP = 2000
@@ -68,9 +70,47 @@ func TestProposalDirectionIsABound(t *testing.T) {
 			},
 			state:      sku(1445, 400),
 			proposal:   propose(1329),
+			wantAction: ActionApprove,
+			wantPrice:  1329,
+			wantRule:   RuleRounding, // stood down: no $5 ending lies between the proposal and the current price
+		},
+		{
+			name: "a cut rounds to the ending between the proposal and the current price, not the one past it",
+			policy: func(p Policy) Policy {
+				p.MaxDecreaseBP = 1500
+				p.Rounding = RoundCharm99
+				return p
+			},
+			state:      sku(1900, 880),
+			proposal:   propose(1745), // 16.99 is nearer and inside the cap, but it is past what was asked
 			wantAction: ActionClamp,
-			wantPrice:  1000,
+			wantPrice:  1799,
 			wantRule:   RuleRounding,
+		},
+		{
+			name: "a rise rounds to the ending between the current price and the proposal, not the one past it",
+			policy: func(p Policy) Policy {
+				p.MaxIncreaseBP = 2000
+				p.Rounding = RoundCharm99
+				return p
+			},
+			state:      sku(2000, 800),
+			proposal:   propose(2260), // 22.99 is nearer and inside the cap, but it is past what was asked
+			wantAction: ActionClamp,
+			wantPrice:  2199,
+			wantRule:   RuleRounding,
+		},
+		{
+			name: "a small cut whose only permitted ending is a cent away is too small to apply",
+			policy: func(p Policy) Policy {
+				p.Rounding = RoundCharm99
+				p.MinChangeBP = 200
+				return p
+			},
+			state:      sku(1800, 800),
+			proposal:   propose(1740), // used to become 16.99, a 5.6% cut on a 3.3% proposal
+			wantAction: ActionReject,
+			wantRule:   RuleMinChange,
 		},
 		{
 			name:       "a cut on a SKU already below its margin floor is infeasible, not clamped up",

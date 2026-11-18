@@ -30,7 +30,19 @@ var goldens = map[string]string{
 	"demo":     "./cmd/demo",
 }
 
-func goldenPath(name string) string { return filepath.Join("testdata", name+".golden") }
+// static names committed result files that no test regenerates, because the
+// command that writes them needs a dataset this repo does not redistribute.
+// README blocks that quote them are still checked line by line.
+var static = map[string]string{
+	"realdata": filepath.Join("pricing", "testdata", "realdata_online_retail_ii.txt"),
+}
+
+func goldenPath(name string) string {
+	if p, ok := static[name]; ok {
+		return p
+	}
+	return filepath.Join("testdata", name+".golden")
+}
 
 func runCmd(t *testing.T, pkg string) string {
 	t.Helper()
@@ -144,7 +156,8 @@ func TestReadmeBlocksQuoteRealOutput(t *testing.T) {
 				pending = ""
 			default:
 				if m := marker.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
-					if _, ok := goldens[m[1]]; !ok {
+					_, isStatic := static[m[1]]
+					if _, ok := goldens[m[1]]; !ok && !isStatic {
 						t.Errorf("%s:%d: unknown golden %q", file, lineNo, m[1])
 						continue
 					}
@@ -158,8 +171,8 @@ func TestReadmeBlocksQuoteRealOutput(t *testing.T) {
 		}
 	}
 	// A check that finds nothing to check proves nothing.
-	if checked < 2 {
-		t.Fatalf("only %d marked output block(s) found across %v; expected at least 2", checked, files)
+	if checked < 3 {
+		t.Fatalf("only %d marked output block(s) found across %v; expected at least 3", checked, files)
 	}
 }
 

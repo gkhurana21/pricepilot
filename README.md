@@ -39,6 +39,7 @@ No estimate, however wrong, can produce a price that breaks the merchant's polic
 | The confidence intervals mean what they say, at the volume tested | 94.8% coverage on a stated 95% interval, over 600 trials at about 45 units a day per SKU |
 | The estimator knows where it stops working | It refuses below 45 units a day per SKU, a floor set by a 330,000-trial sweep with the pass rule fixed in advance ([output](pricing/testdata/volume_sweep.txt)) |
 | Pooling helps thin histories | 56% MSE reduction across 40 sparse SKUs |
+| What it does on real sales is measured, not assumed | On 1.07 million real transaction lines it answers for 63 of 4,707 products, and the same run shows why those answers are suspect: on the same day, the cheaper lines of a product were the bigger orders ([output](pricing/testdata/realdata_online_retail_ii.txt)) |
 | Omitting a confounder has a price | one missing promo control underprices by 26.8% |
 | The docs match the code | The output blocks quoted in the READMEs are checked against the commands' real output on every push (`golden_test.go`) |
 
@@ -72,7 +73,15 @@ Six of thirteen SKUs end with no price change: four never produce a proposal, an
 
 **No revenue lift.** Proving lift requires a live A/B on a real store, and no number in this repo is one.
 
-**Nothing has touched real merchant data.** The order history on the development store is synthetic: generated from a known demand curve with a fixed seed, tagged `pricepilot-synthetic` on every order, and labelled on the review screen, which shows each estimate beside the true value it was generated from. It proves the Shopify integration, not the estimator. The estimator is shown to recover a known elasticity on synthetic orders, which is the only setting where recovery *can* be shown; real demand is non-stationary, cross-elastic and full of stockouts.
+**No evidence that it prices real products well, and some that it would not.** `go run ./cmd/realdata` runs the estimator, exactly as shipped, on a real retailer's transactions: UCI Online Retail II, 1.07 million lines from a UK online gift seller, with the cleaning rules fixed before any estimate was computed ([output](pricing/testdata/realdata_online_retail_ii.txt)).
+
+- It answers for 63 of 4,707 products (1.3%), which sold 19.5% of the units. The volume gate alone refuses 57%. With the gate off it would have answered for 2,396.
+- Those 63 answers should not be trusted either. This retailer sells to wholesalers, and 45% of units sold on days when the same product went at more than one price. On 84% of those product-days, the lines at the day's lowest price were the larger ones. A day's price and a day's volume both depend on who happened to order, and the model has no control for it.
+- The refusal for an implausible sign fired three times. This confounder pushes the slope in the plausible direction, so nothing in the estimator catches it.
+
+Real data has no known true elasticity, so this run cannot say any estimate is right or how wrong it is. It says the method, as built, is not safe to point at a wholesale catalog.
+
+**The app has only ever run on synthetic orders.** The order history on the development store is synthetic: generated from a known demand curve with a fixed seed, tagged `pricepilot-synthetic` on every order, and labelled on the review screen, which shows each estimate beside the true value it was generated from. It proves the Shopify integration, not the estimator. The estimator is shown to recover a known elasticity on synthetic orders, which is the only setting where recovery *can* be shown; real demand is non-stationary, cross-elastic and full of stockouts.
 
 **Nothing about slow-selling products.** The log-log estimator goes wrong when daily unit counts are small, and its intervals do not warn you. From `go run ./cmd/sweep` (10,000 synthetic trials per row, true elasticity −3):
 
@@ -100,6 +109,7 @@ go test ./...                                                # everything, incl.
 go test -run '^$' -fuzz=FuzzDecide -fuzztime=60s ./enforcer  # deep search
 go run ./cmd/pipeline                                        # estimate, propose, enforce on a synthetic catalog
 go run ./cmd/demo                                            # the enforcer's review output on hand-written proposals
+go run ./cmd/realdata -file data/online_retail_II.xlsx       # the estimator on real transactions (download the data first)
 ```
 
 The app needs Node 22.15 or later, the Shopify CLI and a development store. Setup, seeding and tests are in [`shopify-app/README.md`](shopify-app/README.md).
@@ -114,6 +124,7 @@ cmd/engine     the binary the app calls
 cmd/pipeline   the whole chain against known ground truth
 cmd/demo       the enforcer on hand-written proposals
 cmd/sweep      where the estimator stops working, measured
+cmd/realdata   the estimator on a real retailer's transactions
 cmd/seedplan   the synthetic order history, generated deterministically
 shopify-app/   the embedded Shopify app: review, apply, roll back
 PRD.md         product requirements, phases, decisions

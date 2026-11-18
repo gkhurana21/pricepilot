@@ -1,0 +1,272 @@
+# command: go run ./cmd/realdata -file data/online_retail_II.xlsx
+# go version: go1.26.5 darwin/arm64
+# dataset: UCI Online Retail II, https://archive.ics.uci.edu/dataset/502/online+retail+ii (download: https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip)
+# licence: CC BY 4.0. Only aggregate statistics and a few StockCode/description labels appear below.
+# sha256 of the .xlsx: bcbe73b35f5b7babf197fb0cb983a11f5d9ff929078d4aa53d171b1f2df2e980
+# no ground truth: real sales data has no known elasticity, so nothing below can show an estimate is right
+#
+# rules (fixed before any estimate was computed):
+#   Each line is counted under the first rule that drops it, in this order:
+#   R0  a line in sheet "Year 2010-2011" whose Invoice also appears in sheet "Year 2009-2010" is dropped:
+#       the two sheets overlap on 2010-12-01..2010-12-09 and the second repeats lines of the first
+#   R1  malformed: missing or unparseable Invoice, StockCode, Quantity, InvoiceDate or Price, or non-integer Quantity
+#   R2  cancellation: Invoice starts with "C"
+#   R3  Quantity <= 0
+#   R4  Price <= 0, or Price that rounds to 0 pence
+#   R5  non-product: StockCode (upper-cased, trimmed) does not start with a digit (POST, DOT, M, BANK CHARGES, ...)
+#   A product is a StockCode, upper-cased and trimmed. Price in pence = round(Price*100).
+#   Day = calendar date of InvoiceDate as recorded, no time-zone shift; Observation.Day = days since 2009-12-01.
+#   A store-open day is a calendar day with at least one kept line for any product; closed days give no observation.
+#   Per product, one observation per store-open day from its first to its last sale day:
+#     units = sum of quantity that day; price = the price with the most units that day, ties to the lower price;
+#     an open day without a sale is Units 0 at the most recent price; OnPromo false (the data has no promotion flag).
+#   Estimator: pricing.DefaultFitOptions() as shipped (volume gate on), no pooling. Gate-off run: MinMeanUnitsPerDay = 0.
+#   No unit cost is known, so no price is proposed and the enforcer is not run.
+#   Customer ID and Country are not used in sections A-D.
+# fit options: MinDays 45, MinDistinctPrices 3, MinLogPriceSD 0.02, MaxRelativeHalfWidth 0.6, MinMeanUnitsPerDay 45,
+#   ControlPromo true, WeeklySeasonality true, AnnualSeasonality true, Level 0.95
+
+ROWS
+  read from sheet "Year 2009-2010"            525461
+  read from sheet "Year 2010-2011"            541910
+  rows read (data rows, all sheets)                         1067371
+  R0 repeated in the second sheet             -22523  ->   1044848 kept
+  R1 malformed                                     0  ->   1044848 kept
+  R2 cancellation                             -19165  ->   1025683 kept
+  R3 quantity <= 0                             -3393  ->   1022290 kept
+  R4 price <= 0                                -2636  ->   1019654 kept
+  R4 price rounds to 0 pence                     -18  ->   1019636 kept
+  R5 non-product StockCode                     -4691  ->   1014945 kept
+  InvoiceDate range of rows read: 2009-12-01 07:45 to 2011-12-09 12:50
+  store-open days: 604 of the 739 calendar days from 2009-12-01 to 2011-12-09
+  products: 4707; units sold (kept lines): 11221670
+
+A. THE FUNNEL, volume gate ON (pricing.DefaultFitOptions() as shipped)
+                                                                 products    %prod      units   %units
+  products (at least one kept line)                                  4707   100.0%   11221670   100.0%
+    refused too_few_days                                               1817    38.6%     659654     5.9%
+  not refused for too_few_days                                       2890    61.4%   10562016    94.1%
+    refused too_few_distinct_prices                                     105     2.2%     273003     2.4%
+    refused insufficient_price_variation                                 30     0.6%       4389     0.0%
+  not refused for too_few_distinct_prices / insufficient_price_var.     2755    58.5%   10284624    91.6%
+    refused volume_too_low                                             2682    57.0%    7967578    71.0%
+  not refused for volume_too_low = fit attempted                       73     1.6%    2317046    20.6%
+    refused collinear_regressors                                          0     0.0%          0     0.0%
+    refused not_distinguishable_from_zero                                 4     0.1%      45370     0.4%
+    refused implausible_positive_elasticity                               3     0.1%      39629     0.4%
+    refused interval_too_wide                                             3     0.1%      39282     0.4%
+  USABLE                                                               63     1.3%    2192765    19.5%
+
+B. THE SAME FUNNEL, volume gate OFF (MinMeanUnitsPerDay = 0):
+   what the estimator would have answered before the gate existed
+                                                                 products    %prod      units   %units
+  products (at least one kept line)                                  4707   100.0%   11221670   100.0%
+    refused too_few_days                                               1817    38.6%     659654     5.9%
+  not refused for too_few_days                                       2890    61.4%   10562016    94.1%
+    refused too_few_distinct_prices                                     105     2.2%     273003     2.4%
+    refused insufficient_price_variation                                 30     0.6%       4389     0.0%
+  not refused for too_few_distinct_prices / insufficient_price_var.     2755    58.5%   10284624    91.6%
+    refused volume_too_low                                                0     0.0%          0     0.0%
+  not refused for volume_too_low = fit attempted                     2755    58.5%   10284624    91.6%
+    refused collinear_regressors                                          0     0.0%          0     0.0%
+    refused not_distinguishable_from_zero                               133     2.8%     155758     1.4%
+    refused implausible_positive_elasticity                               7     0.1%      44227     0.4%
+    refused interval_too_wide                                           219     4.7%     318292     2.8%
+  USABLE                                                             2396    50.9%    9766347    87.0%
+
+C. USABLE ESTIMATES
+   half-width = (CIHigh - CILow) / 2 of the 95% interval; quantiles are type 7 (linear interpolation)
+  gate ON : 63 usable; elasticity < -1: 63 (100.0%); -1 <= elasticity < 0: 0 (0.0%); refused for a positive sign: 3
+                      min       5%      25%   median      75%      95%      max
+    elasticity     -6.112   -5.020   -3.187   -2.405   -1.977   -1.468   -1.039
+    half-width      0.275    0.316    0.386    0.475    0.704    1.015    1.377
+  gate OFF: 2396 usable; elasticity < -1: 2254 (94.1%); -1 <= elasticity < 0: 142 (5.9%); refused for a positive sign: 7
+                      min       5%      25%   median      75%      95%      max
+    elasticity    -18.565   -3.888   -2.600   -1.996   -1.472   -0.969   -0.452
+    half-width      0.117    0.258    0.371    0.496    0.692    1.154    9.279
+
+   The 15 highest-volume products (by kept units). units/day = units over observations, zero days included;
+   prices = distinct prices on days with sales; days = days with sales / observations (open days in range).
+   A refusal made after a fit shows the point estimate in brackets.
+  StockCode description                       units  units/d prices      days  gate ON                                gate OFF
+  84077     WORLD WAR 2 GLIDERS ASSTD DESI   106379    176.1      6  470/604   -2.75 [-3.22, -2.27]                   -2.75 [-3.22, -2.27]
+  85099B    JUMBO BAG RED RETROSPOT           97350    161.2     12  589/604   -4.96 [-5.49, -4.43]                   -4.96 [-5.49, -4.43]
+  21212     PACK OF 72 RETROSPOT CAKE CASE    94972    157.2      9  594/604   -1.73 [-2.05, -1.41]                   -1.73 [-2.05, -1.41]
+  85123A    WHITE HANGING HEART T-LIGHT HO    94839    157.0     11  603/604   -4.21 [-4.88, -3.53]                   -4.21 [-4.88, -3.53]
+  22197     SMALL POPCORN HOLDER              88537    146.6      6  563/604   -2.17 [-2.68, -1.65]                   -2.17 [-2.68, -1.65]
+  23843     PAPER CRAFT , LITTLE BIRDIE       80995  80995.0      1    1/1     too_few_days                           too_few_days
+  84879     ASSORTED COLOUR BIRD ORNAMENT     80293    132.9      8  582/604   -1.67 [-2.05, -1.29]                   -1.67 [-2.05, -1.29]
+  23166     MEDIUM CERAMIC TOP STORAGE JAR    78033    285.8      3  125/273   -3.94 [-4.92, -2.95]                   -3.94 [-4.92, -2.95]
+  17003     BROCADE RING PURSE                70405    116.8     12  301/603   -2.95 [-3.47, -2.44]                   -2.95 [-3.47, -2.44]
+  21977     PACK OF 60 PINK PAISLEY CAKE C    56230     93.1      7  565/604   -3.05 [-3.45, -2.66]                   -3.05 [-3.45, -2.66]
+  84991     60 TEATIME FAIRY CAKE CASES       54206     89.7      5  559/604   -4.24 [-4.64, -3.84]                   -4.24 [-4.64, -3.84]
+  15036     ASSORTED COLOURS SILK FAN         44272     73.3     11  433/604   -3.05 [-3.46, -2.64]                   -3.05 [-3.46, -2.64]
+  22492     MINI PAINT SET VINTAGE            43618     90.7      5  361/481   -3.74 [-4.15, -3.33]                   -3.74 [-4.15, -3.33]
+  84755     COLOUR GLASS T-LIGHT HOLDER HA    40575     67.2      6  490/604   -2.00 [-2.27, -1.72]                   -2.00 [-2.27, -1.72]
+  20725     LUNCH BAG RED RETROSPOT           40506     67.1      8  594/604   -1.23 [-1.59, -0.87]                   -1.23 [-1.59, -0.87]
+
+   Every product usable with the gate ON (63), by kept units; first 40 shown, 23 not shown:
+  StockCode description                       units  units/d prices      days  gate ON                                gate OFF
+  84077     WORLD WAR 2 GLIDERS ASSTD DESI   106379    176.1      6  470/604   -2.75 [-3.22, -2.27]                   -2.75 [-3.22, -2.27]
+  85099B    JUMBO BAG RED RETROSPOT           97350    161.2     12  589/604   -4.96 [-5.49, -4.43]                   -4.96 [-5.49, -4.43]
+  21212     PACK OF 72 RETROSPOT CAKE CASE    94972    157.2      9  594/604   -1.73 [-2.05, -1.41]                   -1.73 [-2.05, -1.41]
+  85123A    WHITE HANGING HEART T-LIGHT HO    94839    157.0     11  603/604   -4.21 [-4.88, -3.53]                   -4.21 [-4.88, -3.53]
+  22197     SMALL POPCORN HOLDER              88537    146.6      6  563/604   -2.17 [-2.68, -1.65]                   -2.17 [-2.68, -1.65]
+  84879     ASSORTED COLOUR BIRD ORNAMENT     80293    132.9      8  582/604   -1.67 [-2.05, -1.29]                   -1.67 [-2.05, -1.29]
+  23166     MEDIUM CERAMIC TOP STORAGE JAR    78033    285.8      3  125/273   -3.94 [-4.92, -2.95]                   -3.94 [-4.92, -2.95]
+  17003     BROCADE RING PURSE                70405    116.8     12  301/603   -2.95 [-3.47, -2.44]                   -2.95 [-3.47, -2.44]
+  21977     PACK OF 60 PINK PAISLEY CAKE C    56230     93.1      7  565/604   -3.05 [-3.45, -2.66]                   -3.05 [-3.45, -2.66]
+  84991     60 TEATIME FAIRY CAKE CASES       54206     89.7      5  559/604   -4.24 [-4.64, -3.84]                   -4.24 [-4.64, -3.84]
+  15036     ASSORTED COLOURS SILK FAN         44272     73.3     11  433/604   -3.05 [-3.46, -2.64]                   -3.05 [-3.46, -2.64]
+  22492     MINI PAINT SET VINTAGE            43618     90.7      5  361/481   -3.74 [-4.15, -3.33]                   -3.74 [-4.15, -3.33]
+  84755     COLOUR GLASS T-LIGHT HOLDER HA    40575     67.2      6  490/604   -2.00 [-2.27, -1.72]                   -2.00 [-2.27, -1.72]
+  20725     LUNCH BAG RED RETROSPOT           40506     67.1      8  594/604   -1.23 [-1.59, -0.87]                   -1.23 [-1.59, -0.87]
+  21213     PACK OF 72 SKULL CAKE CASES       40433     66.9      9  538/604   -1.86 [-2.16, -1.56]                   -1.86 [-2.16, -1.56]
+  22178     VICTORIAN GLASS HANGING T-LIGH    40257     66.7     10  560/604   -2.12 [-2.50, -1.73]                   -2.12 [-2.50, -1.73]
+  22386     JUMBO BAG PINK POLKADOT           39467     70.4     13  537/561   -2.77 [-3.22, -2.33]                   -2.77 [-3.22, -2.33]
+  22616     PACK OF 12 LONDON TISSUES         39204     81.3     11  371/482   -2.48 [-2.87, -2.09]                   -2.48 [-2.87, -2.09]
+  84568     GIRLS ALPHABET IRON ON PATCHES    38506     63.8      4  223/604   -5.02 [-5.34, -4.71]                   -5.02 [-5.34, -4.71]
+  21232     STRAWBERRY CERAMIC TRINKET BOX    38077     63.0      7  567/604   -2.09 [-2.44, -1.74]                   -2.09 [-2.44, -1.74]
+  85099F    JUMBO BAG STRAWBERRY              37113     61.5     11  552/603   -3.43 [-3.90, -2.97]                   -3.43 [-3.90, -2.97]
+  84946     ANTIQUE SILVER TEA GLASS ETCHE    36841     61.0      8  539/604   -1.91 [-2.23, -1.59]                   -1.91 [-2.23, -1.59]
+  21915     RED  HARMONICA IN BOX             36387     60.7      5  411/599   -3.81 [-4.56, -3.06]                   -3.81 [-4.56, -3.06]
+  22086     PAPER CHAIN KIT 50'S CHRISTMAS    35126     58.2      9  306/604   -2.17 [-2.67, -1.66]                   -2.17 [-2.67, -1.66]
+  84992     72 SWEETHEART FAIRY CAKE CASES    35126     58.3      8  518/603   -3.10 [-3.52, -2.68]                   -3.10 [-3.52, -2.68]
+  71459     HANGING JAM JAR T-LIGHT HOLDER    33109     54.9      6  443/603   -2.24 [-2.56, -1.93]                   -2.24 [-2.56, -1.93]
+  22952     60 CAKE CASES VINTAGE CHRISTMA    33053     89.6      7  215/369   -1.72 [-2.21, -1.24]                   -1.72 [-2.21, -1.24]
+  21982     PACK OF 12 SUKI TISSUES           32541     54.4     12  366/598   -2.24 [-2.57, -1.90]                   -2.24 [-2.57, -1.90]
+  84347     ROTATING SILVER ANGELS T-LIGHT    31433     52.0     13  257/604   -1.84 [-2.37, -1.32]                   -1.84 [-2.37, -1.32]
+  21975     PACK OF 60 DINOSAUR CAKE CASES    31426     52.1      6  516/603   -4.00 [-4.46, -3.54]                   -4.00 [-4.46, -3.54]
+  21980     PACK OF 12 RED RETROSPOT TISSU    31342     51.9     10  389/604   -2.70 [-3.05, -2.35]                   -2.70 [-3.05, -2.35]
+  21080     SET/20 RED RETROSPOT PAPER NAP    31098     51.6      8  584/603   -2.92 [-3.32, -2.53]                   -2.92 [-3.32, -2.53]
+  23084     RABBIT NIGHT LIGHT                30788    169.2      4  136/182   -3.11 [-3.81, -2.41]                   -3.11 [-3.81, -2.41]
+  85099C    JUMBO  BAG BAROQUE BLACK WHITE    30743     50.9      9  560/604   -2.29 [-2.72, -1.85]                   -2.29 [-2.72, -1.85]
+  21931     JUMBO STORAGE BAG SUKI            29196     48.3     13  579/604   -1.45 [-1.81, -1.10]                   -1.45 [-1.81, -1.10]
+  21731     RED TOADSTOOL LED NIGHT LIGHT     28929     47.9     10  523/604   -2.53 [-2.88, -2.19]                   -2.53 [-2.88, -2.19]
+  47566     PARTY BUNTING                     28216     46.7     12  541/604   -1.59 [-1.94, -1.25]                   -1.59 [-1.94, -1.25]
+  22469     HEART OF WICKER SMALL             27932     56.7     12  417/493   -1.98 [-2.45, -1.50]                   -1.98 [-2.45, -1.50]
+  22151     PLACE SETTING WHITE HEART         27710     45.9      6  399/604   -1.66 [-1.96, -1.36]                   -1.66 [-1.96, -1.36]
+  22411     JUMBO SHOPPER VINTAGE RED PAIS    27343     48.7     10  540/561   -1.04 [-1.45, -0.63]                   -1.04 [-1.45, -0.63]
+
+D. EVIDENCE ABOUT CONFOUNDING BY ORDER SIZE
+   The dataset's description says many of this retailer's customers are wholesalers, and wholesale unit prices
+   commonly fall with order size; (ii) tests that here. Where they do, a day's price and a day's units can both
+   be driven by who ordered that day, and a negative slope can appear with no buyer responding to a price.
+
+  (i) Product-days (a product on a day it sold) with more than one distinct unit price among its lines:
+      100319 of 529744 product-days (18.9%), carrying 5064616 of 11221670 units (45.1%)
+      Can show: how often one day's sales of one product happened at several prices, which the daily
+      series collapses to the price with the most units. Cannot show: why the prices differed.
+
+  (ii) Products with at least 200 kept lines: 1466. Split each product's lines at its lower-median line
+      quantity m: large = quantity >= m, small = quantity < m; compare units-weighted mean unit prices.
+      68 excluded because every line is >= m (no small group); 1398 compared.
+      large lines priced strictly lower than small lines: 1382 of 1398 (98.9%)
+      median of (large mean price / small mean price): 0.710
+      Can show: whether bigger lines of the same product paid less per unit. Cannot show: that this
+      moved the daily series, or by how much it biases any one estimate.
+
+  (iii) The 63 products usable with the gate ON, re-estimated from only their lines with quantity <= m
+      (retail-sized lines; same store-open days; range = first to last day with a retained line).
+      gate ON (primary): 2 of 63 still usable; refused: too_few_days 1, too_few_distinct_prices 11, volume_too_low 49
+        retail-only minus all-lines elasticity (n=2): 25% +0.082, median +0.330, 75% +0.578; less negative in 1 of 2
+      gate OFF (secondary: cutting lines cuts volume, which the gate alone would refuse): 43 of 63 still usable; refused: too_few_days 1, too_few_distinct_prices 11, not_distinguishable_from_zero 2, interval_too_wide 6
+        retail-only minus all-lines elasticity (n=43): 25% +0.539, median +0.855, 75% +1.376; less negative in 38 of 43
+      Can show: how much an estimate moves when the largest lines are taken out. Cannot show: which of
+      the two is nearer the truth; the retail-only series is thinner and has confounders of its own.
+      Caution (added after review): keeping lines by quantity cuts off the high-unit lines, which by itself
+      flattens daily units and pulls a slope toward zero. This shift is expected with or without confounding.
+
+  (iv) Added after review, because (ii) pools two years and a price that rose while order sizes fell would
+      look the same. Inside each product-day with more than one price: was the mean line quantity at that
+      day's lowest price larger than at its highest price?
+      lowest-price lines were larger: 84192 of 100319 product-days (83.9%); equal: 6810; smaller: 9317
+      Can show: that on the same day, for the same product, the cheaper lines were the bigger ones, which
+      time cannot explain. Cannot show: how much this moves any one estimate.
+
+F. SECOND RUN WITH ONE RULE CORRECTED (cancelled orders netted out)
+   Sections A-D are the primary result and stand as printed. This section repeats A-C with one rule added
+   after the first run showed it was needed; section D is not recomputed.
+   R2b (corrected rule, added after the first run): R2 drops a cancellation but keeps the order it reversed,
+       so a reversed order still counted as a sale. Here, after R0-R5, each cancellation line (Invoice "C...",
+       Quantity < 0, with a Customer ID, product StockCode), taken in time order, removes the latest still-unmatched
+       kept line with the same Customer ID and StockCode and the opposite Quantity, dated at or before it.
+       Price need not match. A cancellation with no match removes nothing. Everything else is as in sections A-C.
+   cancellation lines eligible to match: 17641; matched and removed: 6255 kept lines, 406735 units
+   kept lines now: 1008690; store-open days: 604; products: 4699
+
+  F.A funnel, volume gate ON
+                                                                 products    %prod      units   %units
+  products (at least one kept line)                                  4699   100.0%   10814935   100.0%
+    refused too_few_days                                               1820    38.7%     532965     4.9%
+  not refused for too_few_days                                       2879    61.3%   10281970    95.1%
+    refused too_few_distinct_prices                                     104     2.2%     270982     2.5%
+    refused insufficient_price_variation                                 30     0.6%       4332     0.0%
+  not refused for too_few_distinct_prices / insufficient_price_var.     2745    58.4%   10006656    92.5%
+    refused volume_too_low                                             2676    56.9%    7877591    72.8%
+  not refused for volume_too_low = fit attempted                       69     1.5%    2129065    19.7%
+    refused collinear_regressors                                          0     0.0%          0     0.0%
+    refused not_distinguishable_from_zero                                 4     0.1%      45136     0.4%
+    refused implausible_positive_elasticity                               3     0.1%      39506     0.4%
+    refused interval_too_wide                                             3     0.1%      38674     0.4%
+  USABLE                                                               59     1.3%    2005749    18.5%
+
+  F.B funnel, volume gate OFF (what the estimator would have answered before the gate existed)
+                                                                 products    %prod      units   %units
+  products (at least one kept line)                                  4699   100.0%   10814935   100.0%
+    refused too_few_days                                               1820    38.7%     532965     4.9%
+  not refused for too_few_days                                       2879    61.3%   10281970    95.1%
+    refused too_few_distinct_prices                                     104     2.2%     270982     2.5%
+    refused insufficient_price_variation                                 30     0.6%       4332     0.0%
+  not refused for too_few_distinct_prices / insufficient_price_var.     2745    58.4%   10006656    92.5%
+    refused volume_too_low                                                0     0.0%          0     0.0%
+  not refused for volume_too_low = fit attempted                     2745    58.4%   10006656    92.5%
+    refused collinear_regressors                                          0     0.0%          0     0.0%
+    refused not_distinguishable_from_zero                               128     2.7%     152869     1.4%
+    refused implausible_positive_elasticity                               7     0.1%      44080     0.4%
+    refused interval_too_wide                                           221     4.7%     322572     3.0%
+  USABLE                                                             2389    50.8%    9487135    87.7%
+
+  F.C usable estimates
+  gate ON : 59 usable; elasticity < -1: 59 (100.0%); -1 <= elasticity < 0: 0 (0.0%); refused for a positive sign: 3
+                      min       5%      25%   median      75%      95%      max
+    elasticity     -6.122   -5.072   -3.124   -2.400   -1.962   -1.435   -1.017
+    half-width      0.275    0.317    0.381    0.475    0.701    1.020    1.378
+  gate OFF: 2389 usable; elasticity < -1: 2250 (94.2%); -1 <= elasticity < 0: 139 (5.8%); refused for a positive sign: 7
+                      min       5%      25%   median      75%      95%      max
+    elasticity    -18.571   -3.837   -2.589   -1.979   -1.471   -0.967   -0.498
+    half-width      0.117    0.257    0.370    0.495    0.691    1.148    9.270
+
+   Gate ON, usable in section A but not here: 4
+     23166 (-3.94 [-4.92, -2.95] -> volume_too_low)
+     84347 (-1.84 [-2.37, -1.32] -> volume_too_low)
+     22151 (-1.66 [-1.96, -1.36] -> volume_too_low)
+     21790 (-3.25 [-3.70, -2.80] -> volume_too_low)
+   Gate ON, usable here but not in section A: 0
+
+   The 15 highest-volume products under the corrected rule:
+  StockCode description                       units  units/d prices      days  gate ON                                gate OFF
+  84077     WORLD WAR 2 GLIDERS ASSTD DESI   105899    175.3      6  469/604   -2.76 [-3.24, -2.29]                   -2.76 [-3.24, -2.29]
+  85099B    JUMBO BAG RED RETROSPOT           96442    159.7     12  589/604   -4.95 [-5.48, -4.42]                   -4.95 [-5.48, -4.42]
+  21212     PACK OF 72 RETROSPOT CAKE CASE    94196    156.0      9  594/604   -1.73 [-2.05, -1.42]                   -1.73 [-2.05, -1.42]
+  85123A    WHITE HANGING HEART T-LIGHT HO    91475    151.4     11  603/604   -4.03 [-4.70, -3.36]                   -4.03 [-4.70, -3.36]
+  22197     SMALL POPCORN HOLDER              88303    146.2      6  563/604   -2.16 [-2.68, -1.65]                   -2.16 [-2.68, -1.65]
+  84879     ASSORTED COLOUR BIRD ORNAMENT     79843    132.2      8  582/604   -1.66 [-2.04, -1.28]                   -1.66 [-2.04, -1.28]
+  17003     BROCADE RING PURSE                69669    115.5     12  301/603   -2.94 [-3.45, -2.42]                   -2.94 [-3.45, -2.42]
+  21977     PACK OF 60 PINK PAISLEY CAKE C    56058     92.8      8  564/604   -3.09 [-3.48, -2.70]                   -3.09 [-3.48, -2.70]
+  84991     60 TEATIME FAIRY CAKE CASES       53990     89.4      5  559/604   -4.24 [-4.64, -3.85]                   -4.24 [-4.64, -3.85]
+  15036     ASSORTED COLOURS SILK FAN         43432     71.9     11  431/604   -3.05 [-3.46, -2.65]                   -3.05 [-3.46, -2.65]
+  22492     MINI PAINT SET VINTAGE            43389     90.2      5  360/481   -3.74 [-4.15, -3.33]                   -3.74 [-4.15, -3.33]
+  21213     PACK OF 72 SKULL CAKE CASES       40361     66.8      9  538/604   -1.86 [-2.16, -1.56]                   -1.86 [-2.16, -1.56]
+  20725     LUNCH BAG RED RETROSPOT           39935     66.1      8  594/604   -1.28 [-1.64, -0.93]                   -1.28 [-1.64, -0.93]
+  84755     COLOUR GLASS T-LIGHT HOLDER HA    39918     66.1      6  490/604   -1.98 [-2.26, -1.71]                   -1.98 [-2.26, -1.71]
+  22178     VICTORIAN GLASS HANGING T-LIGH    39597     65.6     10  560/604   -2.09 [-2.47, -1.70]                   -2.09 [-2.47, -1.70]
+
+E. WHAT THIS SHOWS
+   As shipped, the estimator answers for 63 of 4707 products (1.3%), which sold 19.5% of units; the volume gate alone refuses 2682 (57.0%).
+   Without the gate it would answer for 2396 (50.9%), 94.1% below -1; 2333 of those sell under the 45-a-day floor that cmd/sweep set on synthetic data.
+   Larger lines paid less per unit in 1382 of 1398 products with 200+ lines (median price ratio 0.71), and 45.1% of units sold on product-days with more than one price.
+   So a day's price and a day's units can both move with who ordered that day, and the model has no control for it.
+   Refitting the 63 usable products on retail-sized lines leaves 2 usable with the gate on; with it off, 38 of 43 move toward zero (median +0.86).
+   These estimates are consistent with order-size confounding; this run cannot say how much of any estimate it explains, or that any estimate is right.
+   Netting out cancelled orders (section F, a rule added after the first run) takes the gate-on usable count from 63 to 59.

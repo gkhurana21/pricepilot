@@ -50,6 +50,49 @@ The shipped floor is 45 realised units a day, the smallest volume in the lowest 
 
 Two things this does not fix. One level (5 a day) passes the rule in isolation, because coverage is measured only among runs the other refusals let through; the floor ignores it, since every level above it up to 40 fails. And callers must pass days with no sales as observations with zero units, or a slow product looks busier than it is.
 
+## On real transactions
+
+Everything above is measured on data this package generated. `cmd/realdata` runs the same estimator, with the options it ships with, on UCI Online Retail II: 1,067,371 transaction lines from a UK online gift seller between December 2009 and December 2011 (CC BY 4.0). The data is not redistributed here; the command reads the spreadsheet you download, and its full output is in [`testdata/realdata_online_retail_ii.txt`](testdata/realdata_online_retail_ii.txt). The cleaning rules were written down before any estimate was computed and are printed at the top of that file.
+
+```bash
+mkdir -p data && curl -L -o data/online_retail_ii.zip "https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip" && unzip -o data/online_retail_ii.zip -d data
+go run ./cmd/realdata -file data/online_retail_II.xlsx
+```
+
+What came out:
+
+| | Volume gate on (as shipped) | Volume gate off |
+|---|---|---|
+| Products answered, of 4,707 | 63 (1.3%) | 2,396 (50.9%) |
+| Share of units sold they cover | 19.5% | 87.0% |
+| Estimates below −1 | all 63, median −2.4 | 94.1% |
+
+The gate refuses 2,682 products on its own. Too little history refuses another 1,817.
+
+The 63 answers are probably confounded. This retailer sells to wholesalers, and larger orders pay less. On 18.9% of product-days, carrying 45.1% of units, the same product sold at more than one price, and on 83.9% of those days the lines at the lowest price were larger on average than the lines at the highest. That comparison is inside one product on one day, so a price that drifted over the two years cannot explain it. The daily series keeps only the price with the most units, so a day when a wholesaler ordered shows a low price and a high volume, and the regression reads that as a response to price.
+
+Two weaker measures are in the output and should be read with care. Across the whole two years, lines at or above a product's median size paid less per unit in 1,382 of 1,398 products (a median of 29% less), which a price that rose while orders shrank would also produce. And refitting on retail-sized lines alone moved 38 of 43 estimates toward zero by a median of 0.86, but keeping lines by size cuts off the high-volume days, which flattens a slope with or without confounding. The same-day comparison was added after a review flagged both.
+
+The lines these figures come from, checked against the output file on every push:
+
+<!-- golden: realdata -->
+```
+  USABLE                                                               63     1.3%    2192765    19.5%
+  USABLE                                                             2396    50.9%    9766347    87.0%
+      100319 of 529744 product-days (18.9%), carrying 5064616 of 11221670 units (45.1%)
+      large lines priced strictly lower than small lines: 1382 of 1398 (98.9%)
+      lowest-price lines were larger: 84192 of 100319 product-days (83.9%); equal: 6810; smaller: 9317
+  USABLE                                                               59     1.3%    2005749    18.5%
+```
+
+Three things this exposed that the synthetic tests could not:
+
+- The promo control was the confounder this package knew about. Order size is the same kind of problem, and nothing here controls for it.
+- The refusal for a positive sign fired three times in 4,707 products. A confounder that pushes the slope in the plausible direction passes every check.
+- The first run dropped cancellation lines but kept the orders they reversed, so reversed orders counted as sales. The output keeps that run as printed and adds a second, labelled run with cancelled orders netted out: 63 usable products become 59, and four had cleared the volume gate only because of orders that were later reversed.
+
+There is no ground truth in real sales, so none of this says how far off any estimate is. It says the estimator should not be pointed at a catalog with quantity discounts as it stands.
+
 ## The confounder, priced in dollars
 
 Promotions cut price and lift demand simultaneously. An estimator that ignores them credits the entire promotional lift to the price cut:

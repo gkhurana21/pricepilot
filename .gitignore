@@ -24,3 +24,6 @@ shopify-app/.shopify/
 /engine-bin/
 shopify-app/.engine/
 shopify-app/seed/.state.json
+
+# Downloaded datasets (not redistributed here)
+/data/

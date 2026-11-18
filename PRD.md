@@ -150,7 +150,7 @@ An embedded Shopify app in `shopify-app/`, on Shopify's React Router template.
 **A portfolio project has no merchant sales data, and elasticity cannot be estimated without it.** Pretending otherwise would be the project's biggest integrity failure. Three sources, each labelled in the UI:
 
 1. **Synthetic generator (primary for validation).** Simulate orders from a known demand curve with configurable elasticity, seasonality, promo periods, and noise. Because ground truth is known, the estimator can be *proven* to recover it — something real data can never demonstrate.
-2. **Public retail transaction data (secondary).** For realistic messiness — sparse SKUs, irregular price changes, missing categories.
+2. **Public retail transaction data (secondary).** For realistic messiness — sparse SKUs, irregular price changes, missing categories. **Done:** `cmd/realdata` runs the shipped estimator on UCI Online Retail II (1.07 million lines). It answers for 63 of 4,707 products, and the same run shows those answers are confounded by order size, which the model does not control for. The output is committed in `pricing/testdata/`.
 3. **Shopify dev store (integration path).** Seeded products and orders to exercise the real API, OAuth, chunking, and rollback end to end.
 
 **In-product honesty requirement:** every proposal shows its data basis and confidence. A SKU with 4 orders shows *"insufficient data — no change proposed"*, not a confident number. Elasticity estimates from synthetic data are labelled as such. **No percentage is displayed that the data cannot support.**

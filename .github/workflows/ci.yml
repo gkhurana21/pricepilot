@@ -22,15 +22,30 @@ jobs:
       - name: vet
         run: go vet ./...
 
-      # Runs the unit tests, the 200k-scenario property tests, and every fuzz
-      # input committed under testdata/ as regression cases.
+      # Runs the unit tests, the 200k-scenario property tests, every fuzz input
+      # committed under testdata/ as regression cases, and the golden tests
+      # that pin both demos' output and the README blocks that quote it.
       - name: test
         run: go test -race -count=1 ./...
 
       # A short fuzz run on every push. New failures land in testdata/ as
       # permanent regression cases rather than being rediscovered later.
+      #
+      # Go's fuzzer can exit non-zero at shutdown with "context deadline
+      # exceeded" and no failing input (golang/go#75804). That one case is
+      # retried once. Anything else, or any new file under testdata/, fails.
       - name: fuzz (smoke)
-        run: go test -run '^$' -fuzz=FuzzDecide -fuzztime=45s ./enforcer
-
-      - name: fuzz rounding (smoke)
-        run: go test -run '^$' -fuzz=FuzzRoundWithin -fuzztime=30s ./enforcer
+        run: |
+          set -o pipefail
+          fuzz() { go test -run '^$' -fuzz="$1" -fuzztime="$2" ./enforcer 2>&1 | tee fuzz.log; }
+          for target in "FuzzDecide 45s" "FuzzRoundWithin 30s"; do
+            set -- $target
+            if ! fuzz "$1" "$2"; then
+              if grep -q 'context deadline exceeded' fuzz.log && [ -z "$(git status --porcelain enforcer/testdata)" ]; then
+                echo "::warning::known fuzz shutdown flake on $1; retrying once"
+                fuzz "$1" "$2"
+              else
+                exit 1
+              fi
+            fi
+          done

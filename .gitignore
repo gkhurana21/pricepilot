@@ -7,3 +7,6 @@
 /fuzz-cache/
 
 .DS_Store
+
+# Local planning notes (not part of the project)
+docs/crew/

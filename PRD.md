@@ -117,7 +117,7 @@ The policy engine, standalone and fully tested, before any model exists.
 - Proposal = the margin-optimal price under the estimated demand curve, then handed to the enforcer
 
 **Exit:** on synthetic data with known ground-truth elasticity, the estimator recovers β within ±15% and its confidence intervals are calibrated.
-**Result:** 2.0%–6.7% error across four known elasticities; 94.8% coverage on a stated 95% interval over 600 trials; 56% MSE reduction from pooling across 40 sparse SKUs. Two defects found: a zero-variance control column made X'X singular for every SKU that never went on promo, and catalog-wide pooling degraded well-identified SKUs until it was scoped to collections.
+**Result:** 2.0%–6.7% error across four known elasticities; 94.8% coverage on a stated 95% interval over 600 trials; 56% MSE reduction from pooling across 40 sparse SKUs. Two defects found: a zero-variance control column made X'X singular for every SKU that never went on promo, and catalog-wide pooling degraded well-identified SKUs until it was scoped to collections. A third, found in review in November 2026: the estimator is biased at low sales volume and its intervals do not show it, so it now refuses below 45 units a day per SKU, a floor set by a 330,000-trial sweep (`cmd/sweep`).
 
 ### Phase 3 — merchant app (weeks 4–5)
 Extends the existing BulkPilot codebase.

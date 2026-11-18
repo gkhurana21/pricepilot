@@ -98,7 +98,7 @@ func TestProposalCarriesItsEvidence(t *testing.T) {
 	rng := rand.New(rand.NewSource(77))
 	obs := m.Generate(healthySchedule(), 365, rng)
 
-	est := EstimateElasticity("sku", obs, DefaultFitOptions())
+	est := EstimateElasticity("sku", obs, optionsWithoutVolumeGate())
 	if !est.Usable() {
 		t.Fatalf("estimator refused: %s", est.Note)
 	}
@@ -137,9 +137,10 @@ func TestPoolingImprovesSparseEstimates(t *testing.T) {
 	trueBeta := make([]float64, skus)
 	raw := make([]Estimate, skus)
 
-	opt := DefaultFitOptions()
+	opt := optionsWithoutVolumeGate()
 	opt.MinDays = 20
 	opt.MaxRelativeHalfWidth = 10 // keep noisy fits so pooling has work to do
+	var unitsSum float64
 
 	for i := 0; i < skus; i++ {
 		trueBeta[i] = -2.0 + rng.NormFloat64()*0.25
@@ -151,6 +152,7 @@ func TestPoolingImprovesSparseEstimates(t *testing.T) {
 		}
 		obs := m.Generate(sched, 70, rng)
 		raw[i] = EstimateElasticity("sku", obs, opt)
+		unitsSum += raw[i].MeanUnitsPerDay
 	}
 
 	pooled := Pool(raw, opt)
@@ -175,6 +177,7 @@ func TestPoolingImprovesSparseEstimates(t *testing.T) {
 
 	t.Logf("%d sparse SKUs: MSE %.4f standalone -> %.4f pooled (%.0f%% reduction)",
 		counted, mseRaw, msePooled, (1-msePooled/mseRaw)*100)
+	t.Logf("  (volume gate off for this test; realised %.1f units a day, mean over the %d SKUs)", unitsSum/skus, skus)
 
 	if msePooled >= mseRaw {
 		t.Errorf("pooling did not reduce error: %.4f -> %.4f", mseRaw, msePooled)

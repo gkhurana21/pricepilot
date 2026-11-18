@@ -1,0 +1,53 @@
+
+  PricePilot — end-to-end run on a synthetic catalog
+  13 SKUs · true elasticities known · policy pol_bramble_coffee v5
+  ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ESTIMATION            (β recovered against known truth; pooling is within collection)
+
+                                collection     true β    est β      err  95% interval         source
+    Ethiopia Yirgacheffe 250g   retail-beans    -2.40    -2.37    1.1%  [-2.56, -2.19]       own data
+    Colombia Huila 250g         retail-beans    -1.90    -1.97    3.9%  [-2.12, -1.83]       own data
+    Kenya Nyeri AA 250g         retail-beans    -2.80    -2.76    1.5%  [-2.93, -2.58]       own data
+    Decaf Swiss Water 250g      retail-beans    -2.10    -2.22    5.9%  [-2.41, -2.04]       own data
+    Bramble House Blend 1kg     wholesale       -3.10    -3.25    4.8%  [-3.48, -3.02]       own data
+    Guatemala Antigua 250g      retail-beans    -2.20    -2.19    0.3%  [-2.71, -1.68]       pooled 58%
+    Brazil Cerrado 250g         retail-beans    -2.00    -2.21   10.5%  [-2.70, -1.72]       pooled 53%
+    Sumatra Mandheling 250g     retail-beans    -2.50    -2.04   18.4%* [-2.59, -1.49]       pooled 68%
+    Peru Cajamarca 250g         retail-beans    -1.80    -2.17   20.5%* [-2.66, -1.68]       pooled 53%
+    Chemex Classic 6-cup        equipment       -2.00        —        —  —                    refused: too_few_distinct_prices
+    Hario V60 Filters 100ct     equipment       -1.50        —        —  —                    refused: too_few_distinct_prices
+    Signature Roast Mug         merch           -0.60    -0.63    5.5%  [-0.76, -0.50]       own data
+    Travel Tumbler 350ml        merch           -2.30    -2.44    6.2%  [-2.71, -2.18]       own data
+
+    10 of 13 estimable standalone; pooling rescued 1 more    (* = outside the 15% target)
+
+  PROPOSAL
+
+    9 proposals generated; 4 SKUs produced none
+
+      · Chemex Classic 6-cup         sold at 1 distinct price(s); elasticity needs at least 3
+      · Hario V60 Filters 100ct      sold at 2 distinct price(s); elasticity needs at least 3
+      · Signature Roast Mug          interval [-0.76, -0.50] reaches the inelastic region where no profit-maximising price exists
+      · Travel Tumbler 350ml         no unit cost on this variant, so there is no margin to optimise
+
+  ENFORCEMENT
+
+    Ethiopia Yirgacheffe 250g       16.20  →  no change  16.20 to 15.99 is a -1.30% move, below the 2.00% worth applying
+    Colombia Huila 250g             18.00  →  19.99      +11.06%   margin 50.0%   model's price
+    Kenya Nyeri AA 250g             17.80  →  16.99       -4.56%   margin 35.2%   model's price
+    Decaf Swiss Water 250g          23.00  →  19.99      -13.09%   margin 47.5%   held by max_decrease
+    Bramble House Blend 1kg         33.50  →  no change  the current price 33.50 is below the floor of 33.85 set by margin_floor, so a decrease proposal cannot be applied; raise the price to the floor or relax margin_floor
+    Guatemala Antigua 250g          21.00  →  17.99      -14.34%   margin 45.5%   model's price
+    Brazil Cerrado 250g             19.00  →  16.99      -10.58%   margin 48.2%   held by max_decrease
+    Sumatra Mandheling 250g         22.50  →  19.99      -11.16%   margin 49.0%   model's price
+    Peru Cajamarca 250g             20.00  →  17.99      -10.05%   margin 47.7%   model's price
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────
+  funnel:  13 SKUs  →  11 estimable  →  9 proposals  →  7 applied
+  of those applied, 2 were held back by a guardrail and 5 took the model's price
+  proposals refused outright, by rule:  infeasible_bounds×1  min_change×1
+
+  7 of 13 SKUs reached a price change. On a real catalog that ratio is the
+  product working: most SKUs lack the price variation to estimate anything.
+

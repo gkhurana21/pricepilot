@@ -97,6 +97,7 @@ go run ./cmd/demo                                  # a merchant's review screen
 
 The demo opens with the changes that were *refused*, because that is the part worth trusting:
 
+<!-- golden: demo -->
 ```
   HELD BACK — the agent proposed these and the policy refused
 

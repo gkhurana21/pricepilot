@@ -33,8 +33,9 @@ func TestEstimatorNeverProducesAnUnenforceableProposal(t *testing.T) {
 		t.Fatalf("test policy is invalid: %v", err)
 	}
 
-	opt := DefaultFitOptions()
+	opt := optionsWithoutVolumeGate()
 	proposals, applied := 0, 0
+	var unitsSum float64
 
 	for trial := 0; trial < 400; trial++ {
 		beta := -3.5 + rng.Float64()*3.2 // spans elastic through inelastic
@@ -59,6 +60,7 @@ func TestEstimatorNeverProducesAnUnenforceableProposal(t *testing.T) {
 		}, 200+rng.Intn(200), rng)
 
 		est := EstimateElasticity("sku", obs, opt)
+		unitsSum += est.MeanUnitsPerDay
 		sku := enforcer.SKUState{ID: "sku", CurrentPrice: current, UnitCost: cost}
 
 		prop, refusal, _ := Propose(est, sku)
@@ -93,6 +95,7 @@ func TestEstimatorNeverProducesAnUnenforceableProposal(t *testing.T) {
 	}
 
 	t.Logf("400 catalogs: %d produced a proposal, %d survived the policy", proposals, applied)
+	t.Logf("  (volume gate off for this test; realised %.1f units a day, mean over the 400 catalogs)", unitsSum/400)
 	if proposals == 0 {
 		t.Fatal("no proposals reached the enforcer; the seam is untested")
 	}
@@ -115,7 +118,8 @@ func TestInelasticSKUsNeverReachTheEnforcer(t *testing.T) {
 			WeeklySeasonAmp: 0.2, AnnualSeasonAmp: 0.15, NoiseSD: 0.15,
 		}
 		obs := m.Generate(healthySchedule(), 365, rng)
-		est := EstimateElasticity("sku", obs, DefaultFitOptions())
+		est := EstimateElasticity("sku", obs, optionsWithoutVolumeGate())
+		t.Logf("beta=%.2f (volume gate off for this test; realised %.1f units a day)", beta, est.MeanUnitsPerDay)
 		sku := enforcer.SKUState{ID: "sku", CurrentPrice: 2000, UnitCost: 800}
 
 		prop, refusal, note := Propose(est, sku)

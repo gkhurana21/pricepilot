@@ -30,6 +30,20 @@ func TestTQuantileMatchesTables(t *testing.T) {
 	}
 }
 
+// optionsWithoutVolumeGate is DefaultFitOptions with the volume gate off.
+//
+// The tests that use it measure the estimator's interval arithmetic (recovery,
+// calibration, pooling, the promo confounder, the proposal evidence) on data
+// that realises about 45 units a day, which is at the edge of the shipped
+// floor. They are not tests of the gate; TestVolumeGateRegressionPin and the
+// committed sweep cover that. Switching the gate off here keeps their data,
+// seeds and published numbers exactly as they were.
+func optionsWithoutVolumeGate() FitOptions {
+	opt := DefaultFitOptions()
+	opt.MinMeanUnitsPerDay = 0
+	return opt
+}
+
 func healthySchedule() PriceSchedule {
 	return PriceSchedule{
 		Levels:          []enforcer.Cents{1800, 2000, 2200, 2400},
@@ -60,10 +74,11 @@ func TestRecoversKnownElasticity(t *testing.T) {
 		rng := rand.New(rand.NewSource(int64(beta * -1000)))
 		obs := m.Generate(healthySchedule(), 365, rng)
 
-		est := EstimateElasticity("sku_test", obs, DefaultFitOptions())
+		est := EstimateElasticity("sku_test", obs, optionsWithoutVolumeGate())
 		if !est.Usable() {
 			t.Fatalf("beta=%.1f: refused (%s: %s)", beta, est.Refusal, est.Note)
 		}
+		t.Logf("  (volume gate off for this test; realised %.1f units a day)", est.MeanUnitsPerDay)
 
 		relErr := math.Abs(est.Elasticity-beta) / math.Abs(beta)
 		t.Logf("true %.2f -> estimated %.3f [%.3f, %.3f]  err %.1f%%  R2=%.3f  conf=%s",
@@ -85,12 +100,14 @@ func TestConfidenceIntervalsAreCalibrated(t *testing.T) {
 	const beta = -2.0
 
 	covered, usable := 0, 0
+	var unitsSum float64
 	for i := 0; i < trials; i++ {
 		m := model(beta)
 		rng := rand.New(rand.NewSource(int64(9000 + i)))
 		obs := m.Generate(healthySchedule(), 365, rng)
 
-		est := EstimateElasticity("sku_test", obs, DefaultFitOptions())
+		est := EstimateElasticity("sku_test", obs, optionsWithoutVolumeGate())
+		unitsSum += est.MeanUnitsPerDay
 		if !est.Usable() {
 			continue
 		}
@@ -105,6 +122,7 @@ func TestConfidenceIntervalsAreCalibrated(t *testing.T) {
 	}
 	rate := float64(covered) / float64(usable)
 	t.Logf("95%% interval covered the truth in %d/%d usable trials (%.1f%%)", covered, usable, rate*100)
+	t.Logf("  (volume gate off for this test; realised %.1f units a day, mean over all %d trials)", unitsSum/trials, trials)
 
 	if rate < 0.90 || rate > 0.99 {
 		t.Errorf("coverage %.1f%% is not consistent with a 95%% interval", rate*100)
@@ -204,10 +222,11 @@ func TestSKUThatNeverPromotedIsStillEstimable(t *testing.T) {
 		}
 	}
 
-	est := EstimateElasticity("sku", obs, DefaultFitOptions())
+	est := EstimateElasticity("sku", obs, optionsWithoutVolumeGate())
 	if !est.Usable() {
 		t.Fatalf("refused a SKU that simply never promoted: %s — %s", est.Refusal, est.Note)
 	}
+	t.Logf("(volume gate off for this test; realised %.1f units a day)", est.MeanUnitsPerDay)
 	for _, c := range est.Controls {
 		if c == "promo" {
 			t.Error("a promo control with no variation must be dropped, not fitted")

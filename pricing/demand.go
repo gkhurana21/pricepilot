@@ -57,7 +57,8 @@ type PriceSchedule struct {
 	PromoDiscountBP enforcer.BasisPoints
 }
 
-// Generate simulates daily orders.
+// Generate simulates daily orders, including days on which nothing sold
+// (Units: 0).
 //
 // Counts are Poisson draws around a lognormally-shocked mean rather than a
 // clean lognormal. That makes the data mildly misspecified relative to the
@@ -95,13 +96,12 @@ func (m DemandModel) Generate(sched PriceSchedule, days int, rng *rand.Rand) []O
 		}
 		logLambda += rng.NormFloat64() * m.NoiseSD
 
+		// A zero-unit day is kept. It carries no information for a log-log fit
+		// (EstimateElasticity skips it), but it is a real day of the history:
+		// dropping it would make a slow SKU look like a busier one, and the
+		// average daily volume the estimator gates on would be overstated.
+		// Emitting it draws nothing extra, so the random stream is unchanged.
 		units := poisson(rng, math.Exp(logLambda))
-		if units <= 0 {
-			// A zero-unit day carries no information for a log-log fit and
-			// cannot be logged. Dropping it is a real limitation, recorded in
-			// the estimate as ZeroDays so it is visible rather than hidden.
-			continue
-		}
 
 		obs = append(obs, Observation{Day: day, Price: price, Units: units, OnPromo: onPromo})
 	}

@@ -3,6 +3,7 @@ package pricing
 import (
 	"fmt"
 	"math"
+	"strconv"
 
 	"github.com/gkhurana21/pricepilot/enforcer"
 )
@@ -31,6 +32,7 @@ const (
 	RefusalIndistinct      Refusal = "not_distinguishable_from_zero"
 	RefusalWrongSign       Refusal = "implausible_positive_elasticity"
 	RefusalImprecise       Refusal = "interval_too_wide"
+	RefusalVolumeTooLow    Refusal = "volume_too_low"
 )
 
 // Estimate is one SKU's demand elasticity, with everything a reader needs to
@@ -44,7 +46,17 @@ type Estimate struct {
 	CIHigh     float64
 	Level      float64 // the interval's confidence level, e.g. 0.95
 
-	Days           int
+	// Days is the number of days with sales (Units > 0): the days that carry
+	// evidence and the ones MinDays counts.
+	Days int
+
+	// ZeroDays is the number of observations supplied with Units == 0, and
+	// MeanUnitsPerDay is total units divided by every observation supplied,
+	// zero-sale days included. Both are reported on refused estimates too.
+	// MeanUnitsPerDay is what MinMeanUnitsPerDay is compared against.
+	ZeroDays        int
+	MeanUnitsPerDay float64
+
 	DistinctPrices int
 	LogPriceSD     float64 // the variation the estimate actually rests on
 	RSquared       float64
@@ -102,6 +114,10 @@ type FitOptions struct {
 	MinDistinctPrices    int
 	MinLogPriceSD        float64
 	MaxRelativeHalfWidth float64 // refuse when the interval is wider than this fraction of the estimate
+
+	// MinMeanUnitsPerDay refuses to fit a history whose average daily units
+	// (zero-sale days included) is below it. Zero disables the gate.
+	MinMeanUnitsPerDay float64
 }
 
 // DefaultFitOptions is the specification used in tests and the demo.
@@ -119,10 +135,31 @@ func DefaultFitOptions() FitOptions {
 		// off noise, however many orders sit behind it.
 		MinLogPriceSD:        0.02,
 		MaxRelativeHalfWidth: 0.60,
+
+		// Below this the log-log estimator is not trusted, so it does not
+		// answer. Chosen by a published sweep, not by judgement: see
+		// pricing/testdata/volume_sweep.txt (cmd/sweep, 10,000 trials per
+		// cell, seeds fixed in advance). The criterion, written before the
+		// sweep ran: a demand level passes when, for every true elasticity in
+		// {-1.5, -2, -3}, the lower 95% bound of the 95% interval's coverage is
+		// at least 92% and the relative bias of the mean estimate is at most
+		// 3%. The floor is the smallest realised mean units a day among the
+		// cells of the lowest level that passes with every higher level also
+		// passing (level 40, realising 43.8 to 45.6), rounded up to a multiple
+		// of 5. It is a floor on realised volume, which is what Estimate
+		// reports, not on the demand level the sweep labels its cells with.
+		MinMeanUnitsPerDay: 45,
 	}
 }
 
 // EstimateElasticity fits log(units) on log(price) with optional controls.
+//
+// Callers must supply days on which nothing sold as observations with Units 0,
+// not leave them out. The fit skips them (a zero cannot be logged) and
+// MinDays counts only days with sales, but ZeroDays and MeanUnitsPerDay are
+// computed over every observation supplied; omit the empty days and a slow
+// SKU looks busier than it is, which is exactly what MinMeanUnitsPerDay exists
+// to catch.
 //
 // The refusals are the substance of this function. Elasticity is identified by
 // variation in price, not by volume of sales: ten thousand orders at a single
@@ -133,14 +170,27 @@ func EstimateElasticity(skuID string, obs []Observation, opt FitOptions) Estimat
 	est := Estimate{
 		SKUID:        skuID,
 		Level:        opt.Level,
-		Days:         len(obs),
 		Method:       MethodRefused,
 		PromoControl: opt.ControlPromo,
 	}
 
-	if len(obs) < opt.MinDays {
+	totalUnits := 0
+	for _, o := range obs {
+		totalUnits += o.Units
+		switch {
+		case o.Units == 0:
+			est.ZeroDays++
+		case o.Units > 0:
+			est.Days++
+		}
+	}
+	if len(obs) > 0 {
+		est.MeanUnitsPerDay = float64(totalUnits) / float64(len(obs))
+	}
+
+	if est.Days < opt.MinDays {
 		est.Refusal = RefusalTooFewDays
-		est.Note = fmt.Sprintf("%d days of sales; %d needed", len(obs), opt.MinDays)
+		est.Note = fmt.Sprintf("%d days of sales; %d needed", est.Days, opt.MinDays)
 		return est
 	}
 
@@ -165,6 +215,13 @@ func EstimateElasticity(skuID string, obs []Observation, opt FitOptions) Estimat
 	if est.LogPriceSD < opt.MinLogPriceSD {
 		est.Refusal = RefusalNoPriceVariance
 		est.Note = fmt.Sprintf("log-price variation of %.4f is too small to identify a slope", est.LogPriceSD)
+		return est
+	}
+
+	if opt.MinMeanUnitsPerDay > 0 && est.MeanUnitsPerDay < opt.MinMeanUnitsPerDay {
+		est.Refusal = RefusalVolumeTooLow
+		est.Note = fmt.Sprintf("%.1f units a day on average; the estimator is only validated at %s or more",
+			est.MeanUnitsPerDay, strconv.FormatFloat(opt.MinMeanUnitsPerDay, 'f', -1, 64))
 		return est
 	}
 

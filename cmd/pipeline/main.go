@@ -21,6 +21,21 @@ import (
 	"github.com/gkhurana21/pricepilot/pricing"
 )
 
+// baseLogDemand sets the catalog's volume: the log of the expected units a day
+// at each SKU's listed price, before seasonality, promotions and noise.
+//
+// It was 3.7 (about 40 a day), which was fine while the estimator answered at
+// any volume. The estimator now refuses below MinMeanUnitsPerDay (45 realised
+// units a day, chosen by the published sweep in pricing/testdata), and at 3.7
+// five of the eleven SKUs that used to produce an estimate realised 18 to 44 a
+// day and were refused for volume. 5.2 (about 180 a day at the listed price)
+// puts the lowest SKU, whose schedule sits well above its listed price, at
+// least 1.5 times the floor, so the demo shows the product as shipped, gate on,
+// rather than a catalog that happens to sit on the edge of it. SKUs that fail
+// for price variation, a missing cost or an inelastic curve still fail for
+// those reasons; only the volume is changed.
+const baseLogDemand = 5.2
+
 type product struct {
 	name       string
 	collection string
@@ -87,7 +102,7 @@ func main() {
 	for i, p := range catalog {
 		m := pricing.DemandModel{
 			SKUID: p.name, Elasticity: p.trueBeta,
-			BaseLogDemand:   3.7 - p.trueBeta*math.Log(float64(p.price)/100),
+			BaseLogDemand:   baseLogDemand - p.trueBeta*math.Log(float64(p.price)/100),
 			WeeklySeasonAmp: 0.20, AnnualSeasonAmp: 0.15, PromoLift: 0.40, NoiseSD: 0.15,
 		}
 		obs := m.Generate(p.sched, p.days, rng)

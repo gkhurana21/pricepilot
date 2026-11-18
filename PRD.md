@@ -4,9 +4,9 @@
 
 | | |
 |---|---|
-| Status | v1.1 — phases 1 and 2 built |
+| Status | v1.2 — phases 1 to 3 built |
 | Owner | Gaurang Khurana |
-| Builds on | [BulkPilot](https://github.com/gkhurana21/bulkpilot) — embedded Shopify app, OAuth, `productVariantsBulkUpdate`, snapshot rollback |
+| Builds on | An earlier bulk price editor of mine, whose chunked `productVariantsBulkUpdate` apply and snapshot rollback were ported into `shopify-app/` and given tests |
 | Target | Shopify SWE / Data co-op application |
 
 ---
@@ -58,7 +58,7 @@ This is the core of the project and the reason it exists.
 - a SKU on the exclusion list is never modified
 - applying the full decision set never violates the velocity cap
 - every rejection carries a reason that names the rule it failed
-- a price that changes moves the way the proposal pointed, never the opposite way
+- a price that changes lands between the current price and the proposal, never the opposite way and never past it
 
 This is the same separation as [tradebot](https://github.com/gkhurana21/tradebot), where a Go risk engine retains final authority over an LLM's trade proposals. The lesson transfers directly: **the interesting engineering is the part that says no.**
 
@@ -108,7 +108,7 @@ The policy engine, standalone and fully tested, before any model exists.
 - Golden-file tests for every rule and every interaction between rules
 
 **Exit:** the enforcer cannot be made to violate an invariant by any generated input.
-**Result:** 74.4M fuzz executions in 10 minutes, 0 violations (first measured as 4.5M in 40 seconds). 49 discovered corpus entries committed as regression cases. Two defects found by the tests: clamps naming the wrong binding rule, and a summary breakdown that undercounted. Two more found in review in November 2026, each now a test: a proposed cut could be clamped and rounded into a rise, and the velocity rule depended on the server's time zone.
+**Result:** 62.5M fuzz executions in 10 minutes on the current code, 0 violations (first measured as 4.5M in 40 seconds). 49 discovered corpus entries committed as regression cases. Two defects found by the tests: clamps naming the wrong binding rule, and a summary breakdown that undercounted. Three more found in review in November 2026, each now a test: a proposed cut could be clamped and rounded into a rise, rounding could carry a change past the proposal (an 8% proposed cut became 30.8%), and the velocity rule depended on the server's time zone.
 
 ### Phase 2 — demand signal + proposer (weeks 2–3) · **BUILT**
 - **Elasticity estimation** per product/collection from order history: log-log regression of quantity on price with controls, shrunk toward the collection mean when a SKU has thin data (hierarchical/partial pooling — the honest fix for sparse SKUs)
@@ -119,17 +119,24 @@ The policy engine, standalone and fully tested, before any model exists.
 **Exit:** on synthetic data with known ground-truth elasticity, the estimator recovers β within ±15% and its confidence intervals are calibrated.
 **Result:** 2.0%–6.7% error across four known elasticities; 94.8% coverage on a stated 95% interval over 600 trials; 56% MSE reduction from pooling across 40 sparse SKUs. Two defects found: a zero-variance control column made X'X singular for every SKU that never went on promo, and catalog-wide pooling degraded well-identified SKUs until it was scoped to collections. A third, found in review in November 2026: the estimator is biased at low sales volume and its intervals do not show it, so it now refuses below 45 units a day per SKU, a floor set by a 330,000-trial sweep (`cmd/sweep`).
 
-### Phase 3 — merchant app (weeks 4–5)
-Extends the existing BulkPilot codebase.
+### Phase 3 — merchant app (weeks 4–5) · **BUILT**
+An embedded Shopify app in `shopify-app/`, on Shopify's React Router template.
 
-- Policy editor (Polaris) — the merchant sets their own rules
-- Run review screen: proposal table with current → proposed, Δ%, margin after, the signals behind it, and the enforcer's decision
-- Approve all / approve selected / reject
-- Apply via `productVariantsBulkUpdate`, chunked to 250, with per-variant partial-failure handling
-- Snapshot + one-click rollback (already built in BulkPilot)
-- Run history with policy version pinned per run
+- Run review screen: refused proposals first, then those a guardrail adjusted, those accepted, and the products the estimator declined. Each row shows current, proposed and final price, the change, the margin after, the deciding rule and every reason.
+- The policy in force, displayed read-only with its hash
+- Apply via `productVariantsBulkUpdate`, chunked to 250, with per-variant partial-failure handling. Live prices are re-read first, and a variant whose price moved since the preview is skipped.
+- Snapshot and one-click rollback, which skips any price edited since the run applied it
+- Every apply and rollback is verified by re-reading prices from Shopify
+- Run history with the policy hash pinned per run
+- The app's own price-change log, which feeds the enforcer's velocity rule (Shopify keeps no price history)
+- Recovery when a write is interrupted: the run is reconciled against live prices before anything else is offered
+
+**Cut from the original scope:** the policy editor and "approve selected". A run is applied whole or not at all, and the policy is a file. Both are real product needs and neither was needed to show the thesis.
+
+**How the app reaches the engine:** as a subprocess. `cmd/engine` reads one JSON request and writes one JSON reply; for decisions the request and reply are the enforcer's own types. A WebAssembly build was prototyped and gave byte-identical decisions, but a subprocess runs the same compiled code the tests run and needs no equivalence harness.
 
 **Exit:** a full cycle on a Shopify dev store — propose, review, apply, roll back — with prices restored exactly.
+**Result:** on a development store on 2026-11-18, against 90 days of seeded synthetic orders, the preview matched the engine run directly on the same data for all 13 products; apply changed exactly the 5 intended prices; rollback restored all 13; a run made straight after the rollback was refused by the 14-day velocity rule. Each step was checked by reading prices from Shopify outside the app. 140 app tests run against the real engine binary and a fake Admin API. Two defects found on the way: the review layout clipped its deciding-rule column inside the Shopify admin, and the orders query asked for an id the app never used.
 
 ### Phase 4 — explanation and governance (week 6)
 - Per-proposal explanation: which signals moved the price and by how much
@@ -156,10 +163,10 @@ Extends the existing BulkPilot codebase.
 |---|---|---|---|
 | Enforcer | Go, pure functions, integer money, native fuzzing | Built | No I/O, so its guarantees can be tested on every input |
 | Estimation | Go, standard library only (own OLS and t-quantiles) | Built | One language and no dependencies between the model and the guardrail |
-| CI | GitHub Actions: gofmt, vet, race tests, a short fuzz run | Built | The committed fuzz corpus runs as regression cases on every push |
-| Shopify app | React Router 7, Polaris, App Bridge, Prisma | Phase 3, not built | Already proven in BulkPilot; the official embedded stack |
-| App to engine | To be settled in the phase 3 plan | Phase 3, not built | The app must run the same Go source that was fuzzed, not a port |
-| Data | Prisma (SQLite in BulkPilot today) | Phase 3, not built | Runs, snapshots, policies, audit log |
+| CI | GitHub Actions: gofmt, vet, race tests, a short fuzz run; app typecheck, lint and tests | Built | The committed fuzz corpus runs as regression cases on every push |
+| Shopify app | React Router 7, Polaris web components, App Bridge, Prisma (SQLite) | Built | The official embedded stack |
+| App to engine | `cmd/engine` as a subprocess, JSON over stdin and stdout | Built | The app runs the same compiled Go the tests run; no pricing logic exists in TypeScript |
+| Data | Prisma with SQLite | Built | Runs, the policy, and the app's own price-change log. No order or customer rows are stored |
 
 v1.0 of this document planned a TypeScript enforcer and a Python estimation service. Both were built in Go instead.
 
@@ -173,7 +180,7 @@ v1.0 of this document planned a TypeScript enforcer and a Python estimation serv
 | Reviewers read "AI changes your prices" and stop there | Medium | Lead every surface with the enforcer, not the model. The demo opens by *showing a proposal get rejected*. |
 | Scope creep into a full pricing suite | High | Phase 1 is the enforcer alone. If only phases 1–2 ship, the project still demonstrates the thesis. |
 | Synthetic data seen as a cop-out | Medium | Frame it correctly: synthetic data is the *only* way to prove estimator correctness, and it's paired with a real dev-store integration. |
-| Shopify API limits on large catalogs | Low | Already solved in BulkPilot — 250-variant chunking, partial-failure handling. |
+| Shopify API limits on large catalogs | Low | Handled for this scale: 250-variant chunking and partial-failure handling. Order reads are paginated; a large catalog would need bulk operations. |
 
 ---
 
@@ -182,7 +189,7 @@ v1.0 of this document planned a TypeScript enforcer and a Python estimation serv
 1. **The enforcer ships first, before any model.** The safety story is the product; building it last would make it decoration.
 2. **The enforcer is pure and deterministic** — no model call, no network, no randomness — so its guarantees are testable rather than hoped for.
 3. **Nothing auto-applies in v1.** Merchant approval is required for every run.
-4. **Build on BulkPilot rather than starting fresh.** OAuth, session storage, bulk mutations, and rollback are solved; rewriting them proves nothing.
+4. **Build on the earlier bulk price editor rather than starting fresh.** Its bulk mutation and rollback logic was ported and tested; OAuth and session storage come from Shopify's template.
 5. **No competitor scraping.** Optional merchant-supplied input only.
 6. **Low-confidence SKUs propose no change.** Silence beats a confident wrong number.
 7. **Synthetic data is the validation set of record**, because ground-truth elasticity is knowable there and nowhere else.

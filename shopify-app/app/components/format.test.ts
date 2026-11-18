@@ -241,3 +241,17 @@ describe("ruleLabel", () => {
     expect(ruleLabel(null)).toBe("");
   });
 });
+
+describe("rollback wording", () => {
+  const item = { skuId: "a", title: "A", fromPrice: 1699, toPrice: 1900, status: "applied", error: null, livePriceAfter: 1900, verified: true } as never;
+  it("calls a written item Restored in a rollback report and Applied in an apply report", () => {
+    expect(writeStatusBadge(item, "rollback")).toBe("Restored");
+    expect(writeStatusBadge(item, "apply")).toBe("Applied");
+    expect(writeStatusBadge(item)).toBe("Applied");
+  });
+  it("says restored in the rollback summary line", () => {
+    const report = { at: "", attempted: 1, applied: 1, skipped: 0, failed: 0, verified: 1, items: [item] } as never;
+    expect(reportLine(report, "rollback")).toContain("1 restored");
+    expect(reportLine(report)).toContain("1 written");
+  });
+});

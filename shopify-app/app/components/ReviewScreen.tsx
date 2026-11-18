@@ -190,7 +190,7 @@ export function ReviewScreen(props: ReviewScreenProps) {
 
             {run.apply && <WriteReportSection heading="Apply report" report={run.apply} />}
             {run.rollback && (
-              <WriteReportSection heading="Rollback report" report={run.rollback} />
+              <WriteReportSection heading="Rollback report" report={run.rollback} kind="rollback" />
             )}
 
             <OutcomeSections run={run} />

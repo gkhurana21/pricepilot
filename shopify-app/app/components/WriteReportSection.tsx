@@ -26,14 +26,16 @@ import {
 export function WriteReportSection({
   heading,
   report,
+  kind = "apply",
 }: {
   heading: string;
   report: WriteReport;
+  kind?: "apply" | "rollback";
 }) {
   return (
     <s-section heading={heading}>
       <s-stack direction="block" gap="base">
-        <s-paragraph>{reportLine(report)}</s-paragraph>
+        <s-paragraph>{reportLine(report, kind)}</s-paragraph>
         <s-text color="subdued">
           {report.recovered
             ? `Rebuilt ${formatDateTime(report.at)} from the live prices in Shopify, after the write was interrupted.`
@@ -46,7 +48,7 @@ export function WriteReportSection({
               <li key={item.skuId} style={i === 0 ? firstRowItem : rowItem}>
                 <div style={headLine}>
                   <strong style={wrap}>{item.title}</strong>
-                  <Badge tone={writeStatusTone(item)}>{writeStatusBadge(item)}</Badge>
+                  <Badge tone={writeStatusTone(item)}>{writeStatusBadge(item, kind)}</Badge>
                 </div>
                 <div style={priceLine}>
                   <span style={bigPrice}>

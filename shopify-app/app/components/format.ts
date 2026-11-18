@@ -247,21 +247,24 @@ export function acceptedBadgeText(row: ReviewRow, policy: Policy): string {
  * Shopify". Items an interrupted write never wrote are named as such rather
  * than counted as failures.
  */
-export function reportLine(report: WriteReport): string {
+export function reportLine(report: WriteReport, kind: "apply" | "rollback" = "apply"): string {
   const notWritten = report.items.filter((i) => i.status === "not_written").length;
   const failed = report.failed - notWritten;
   return (
-    `${report.applied} written, ${report.skipped} skipped, ${failed} failed` +
+    `${report.applied} ${kind === "rollback" ? "restored" : "written"}, ${report.skipped} skipped, ${failed} failed` +
     (notWritten > 0 ? `, ${notWritten} not written` : "") +
     ` · ${report.verified} of ${report.applied} verified by re-reading prices from Shopify`
   );
 }
 
 /** The short badge text for a write item. The explanation is writeStatusDetail. */
-export function writeStatusBadge(item: WriteItem): string {
+// kind says which report the item is in: in a rollback report a written item
+// was restored to its earlier price, and calling that "Applied" reads as the
+// opposite of what happened.
+export function writeStatusBadge(item: WriteItem, kind: "apply" | "rollback" = "apply"): string {
   switch (item.status) {
     case "applied":
-      return "Applied";
+      return kind === "rollback" ? "Restored" : "Applied";
     case "stale_price":
     case "edited_since_apply":
       return "Skipped";

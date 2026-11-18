@@ -1,0 +1,34 @@
+{
+  "id": "pol_bramble_coffee",
+  "version": 1,
+  "margin_floor": {
+    "basis": "on_price",
+    "rate": 4000,
+    "absolute_floor": 0
+  },
+  "respect_map": false,
+  "max_decrease_bp": 1500,
+  "max_increase_bp": 1000,
+  "hard_floor": 0,
+  "hard_ceiling": 0,
+  "velocity": {
+    "min_days_between_changes": 14,
+    "max_changes_per_window": 2,
+    "window_days": 90
+  },
+  "exclusions": {
+    "sku_ids": [],
+    "tags": [
+      "subscription"
+    ],
+    "collections": []
+  },
+  "rounding": {
+    "modulus": 100,
+    "residue": 99,
+    "enabled": true
+  },
+  "min_change_bp": 200,
+  "min_confidence_bp": 6000,
+  "max_skus_changed_bp": 10000
+}

@@ -10,3 +10,17 @@
 
 # Local planning notes (not part of the project)
 docs/crew/
+
+# Shopify app: secrets, local database, dependencies, build output
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-journal
+node_modules/
+shopify-app/build/
+shopify-app/.react-router/
+shopify-app/.shopify/
+/engine-bin/
+shopify-app/.engine/
+shopify-app/seed/.state.json

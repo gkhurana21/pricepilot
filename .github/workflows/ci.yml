@@ -49,3 +49,39 @@ jobs:
               fi
             fi
           done
+
+  # The embedded Shopify app. Its tests run the real Go engine (built from
+  # ./cmd/engine), so Go is needed here too.
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shopify-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: shopify-app/package-lock.json
+
+      - name: install
+        run: npm ci
+
+      - name: build the Go engine
+        run: npm run engine:build
+
+      - name: prisma generate
+        run: npx prisma generate
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: lint
+        run: npm run lint
+
+      - name: test
+        run: npm test

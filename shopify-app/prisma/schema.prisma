@@ -1,0 +1,86 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// The active pricing policy per shop: the newest record is in force. The hash
+// always comes from the Go engine's policy_hash op, never from TypeScript.
+model PolicyRecord {
+  id        String   @id @default(cuid())
+  shop      String
+  json      String
+  hash      String
+  version   Int
+  createdAt DateTime @default(now())
+
+  @@index([shop, createdAt])
+}
+
+// One review of the catalog: decided and stored as a PREVIEW, optionally
+// applied and rolled back later. Only the per-SKU estimate/decision summary is
+// kept (rowsJson); order rows and customer data are aggregated in memory and
+// never stored.
+model Run {
+  id            String    @id @default(cuid())
+  shop          String
+  createdAt     DateTime  @default(now())
+  // PREVIEW | APPLYING | APPLIED | PARTIAL | FAILED | ROLLING_BACK | ROLLED_BACK | ROLLBACK_PARTIAL
+  status        String
+  policyJson    String
+  policyHash    String
+  optionsJson   String
+  dataBasisJson String
+  summaryJson   String
+  rowsJson      String
+  applyJson     String?
+  rollbackJson  String?
+  rolledBackAt  DateTime?
+
+  @@index([shop, createdAt])
+}
+
+// The app's own price-change log. Shopify keeps no price history, so this is
+// what feeds the engine's velocity rules (last change, changes in the window).
+model PriceChange {
+  id        String   @id @default(cuid())
+  shop      String
+  variantId String
+  at        DateTime @default(now())
+  fromCents Int
+  toCents   Int
+  runId     String
+  kind      String // "apply" | "rollback"
+
+  @@index([shop, variantId])
+  @@index([runId])
+}

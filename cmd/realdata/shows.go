@@ -32,11 +32,33 @@ func whatThisShows(sum string, fOn, fOff funnel, cf confounding, fF correctedFun
 			fOff.Usable-fOn.Usable, pricing.DefaultFitOptions().MinMeanUnitsPerDay),
 		fmt.Sprintf("Larger lines paid less per unit in %d of %d products with %d+ lines (median price ratio %.2f), and %.1f%% of units sold on product-days with more than one price.",
 			cf.splitLower, compared, minLinesForSplit, cf.medianRatio, pct(cf.multiUnits, cf.units)),
-		"So a day's price and a day's units can both move with who ordered that day, and the model has no control for it.",
+		sameDayLine(cf),
 		fmt.Sprintf("Refitting the %d usable products on retail-sized lines leaves %d usable with the gate on; with it off, %d of %d move toward zero (median %+.2f).",
 			cf.retailN, cf.retailUsableOn, shifted, len(cf.diffOff), quantile(cf.diffOff, 0.5)),
-		"These estimates are consistent with order-size confounding; this run cannot say how much of any estimate it explains, or that any estimate is right.",
+		verdictLine(cf),
 		fmt.Sprintf("Netting out cancelled orders (section F, a rule added after the first run) takes the gate-on usable count from %d to %d.",
 			fOn.Usable, fF.on.Usable),
 	}
+}
+
+// orderSizeEvidence reports whether this run's own numbers point at order-size
+// confounding: most multi-price product-days had their larger lines at the
+// lower price, and those days carry a material share of the units. The
+// sentences below are chosen by it, so the summary cannot keep saying
+// something the figures above it have stopped showing.
+func orderSizeEvidence(cf confounding) bool {
+	return cf.sameDays > 0 && 2*cf.sameLowLarger > cf.sameDays && 5*cf.multiUnits > cf.units
+}
+
+func sameDayLine(cf confounding) string {
+	return fmt.Sprintf("On %.1f%% of the product-days with more than one price, the lines at the lowest price were the larger ones; "+
+		"this command gives the estimator one price and one unit count a day and no order sizes.",
+		pct(cf.sameLowLarger, cf.sameDays))
+}
+
+func verdictLine(cf confounding) string {
+	if orderSizeEvidence(cf) {
+		return "These estimates are consistent with order-size confounding; this run cannot say how much of any estimate it explains, or that any estimate is right."
+	}
+	return "The order-size measures in section D do not point one way on this run; it cannot say that any estimate is right."
 }

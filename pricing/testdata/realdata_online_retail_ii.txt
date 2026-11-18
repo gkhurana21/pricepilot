@@ -7,8 +7,9 @@
 #
 # rules (fixed before any estimate was computed):
 #   Each line is counted under the first rule that drops it, in this order:
-#   R0  a line in sheet "Year 2010-2011" whose Invoice also appears in sheet "Year 2009-2010" is dropped:
-#       the two sheets overlap on 2010-12-01..2010-12-09 and the second repeats lines of the first
+#   R0  a line in sheet "Year 2010-2011" is dropped when sheet "Year 2009-2010" holds the same Invoice and an
+#       identical line (the sheets overlap on 2010-12-01..2010-12-09); a line under a repeated Invoice number
+#       that the first sheet never held is kept (tightened after review: it first matched on Invoice alone)
 #   R1  malformed: missing or unparseable Invoice, StockCode, Quantity, InvoiceDate or Price, or non-integer Quantity
 #   R2  cancellation: Invoice starts with "C"
 #   R3  Quantity <= 0
@@ -31,6 +32,7 @@ ROWS
   read from sheet "Year 2010-2011"            541910
   rows read (data rows, all sheets)                         1067371
   R0 repeated in the second sheet             -22523  ->   1044848 kept
+     (lines under a repeated Invoice number that were not repeats, kept: 0)
   R1 malformed                                     0  ->   1044848 kept
   R2 cancellation                             -19165  ->   1025683 kept
   R3 quantity <= 0                             -3393  ->   1022290 kept
@@ -189,53 +191,56 @@ F. SECOND RUN WITH ONE RULE CORRECTED (cancelled orders netted out)
    after the first run showed it was needed; section D is not recomputed.
    R2b (corrected rule, added after the first run): R2 drops a cancellation but keeps the order it reversed,
        so a reversed order still counted as a sale. Here, after R0-R5, each cancellation line (Invoice "C...",
-       Quantity < 0, with a Customer ID, product StockCode), taken in time order, removes the latest still-unmatched
-       kept line with the same Customer ID and StockCode and the opposite Quantity, dated at or before it.
-       Price need not match. A cancellation with no match removes nothing. Everything else is as in sections A-C.
-   cancellation lines eligible to match: 17641; matched and removed: 6255 kept lines, 406735 units
-   kept lines now: 1008690; store-open days: 604; products: 4699
+       Quantity < 0, with a Customer ID, product StockCode), taken in time order, looks at the kept lines with the
+       same Customer ID and StockCode dated at or before it. If one has exactly the cancelled quantity left, the
+       latest such line is removed. Otherwise the latest line with more than that left has the quantity taken off
+       (a partial cancellation; added after review). Otherwise nothing is removed. Price need not match.
+       A cancellation with no Customer ID cannot be tied to an order and is not matched.
+   cancellation lines eligible to match: 17641; lines removed whole: 6360; lines reduced: 9458; units taken off: 448008
+   not matchable (product cancellations with no Customer ID): 332 lines, 3688 units, still counted as sales
+   kept lines now: 1008585; store-open days: 604; products: 4699
 
   F.A funnel, volume gate ON
                                                                  products    %prod      units   %units
-  products (at least one kept line)                                  4699   100.0%   10814935   100.0%
-    refused too_few_days                                               1820    38.7%     532965     4.9%
-  not refused for too_few_days                                       2879    61.3%   10281970    95.1%
-    refused too_few_distinct_prices                                     104     2.2%     270982     2.5%
-    refused insufficient_price_variation                                 30     0.6%       4332     0.0%
-  not refused for too_few_distinct_prices / insufficient_price_var.     2745    58.4%   10006656    92.5%
-    refused volume_too_low                                             2676    56.9%    7877591    72.8%
-  not refused for volume_too_low = fit attempted                       69     1.5%    2129065    19.7%
+  products (at least one kept line)                                  4699   100.0%   10773662   100.0%
+    refused too_few_days                                               1820    38.7%     531819     4.9%
+  not refused for too_few_days                                       2879    61.3%   10241843    95.1%
+    refused too_few_distinct_prices                                     104     2.2%     270760     2.5%
+    refused insufficient_price_variation                                 30     0.6%       4309     0.0%
+  not refused for too_few_distinct_prices / insufficient_price_var.     2745    58.4%    9966774    92.5%
+    refused volume_too_low                                             2677    57.0%    7852616    72.9%
+  not refused for volume_too_low = fit attempted                       68     1.4%    2114158    19.6%
     refused collinear_regressors                                          0     0.0%          0     0.0%
-    refused not_distinguishable_from_zero                                 4     0.1%      45136     0.4%
-    refused implausible_positive_elasticity                               3     0.1%      39506     0.4%
-    refused interval_too_wide                                             3     0.1%      38674     0.4%
-  USABLE                                                               59     1.3%    2005749    18.5%
+    refused not_distinguishable_from_zero                                 4     0.1%      45022     0.4%
+    refused implausible_positive_elasticity                               3     0.1%      39445     0.4%
+    refused interval_too_wide                                             2     0.0%      29957     0.3%
+  USABLE                                                               59     1.3%    1999734    18.6%
 
   F.B funnel, volume gate OFF (what the estimator would have answered before the gate existed)
                                                                  products    %prod      units   %units
-  products (at least one kept line)                                  4699   100.0%   10814935   100.0%
-    refused too_few_days                                               1820    38.7%     532965     4.9%
-  not refused for too_few_days                                       2879    61.3%   10281970    95.1%
-    refused too_few_distinct_prices                                     104     2.2%     270982     2.5%
-    refused insufficient_price_variation                                 30     0.6%       4332     0.0%
-  not refused for too_few_distinct_prices / insufficient_price_var.     2745    58.4%   10006656    92.5%
+  products (at least one kept line)                                  4699   100.0%   10773662   100.0%
+    refused too_few_days                                               1820    38.7%     531819     4.9%
+  not refused for too_few_days                                       2879    61.3%   10241843    95.1%
+    refused too_few_distinct_prices                                     104     2.2%     270760     2.5%
+    refused insufficient_price_variation                                 30     0.6%       4309     0.0%
+  not refused for too_few_distinct_prices / insufficient_price_var.     2745    58.4%    9966774    92.5%
     refused volume_too_low                                                0     0.0%          0     0.0%
-  not refused for volume_too_low = fit attempted                     2745    58.4%   10006656    92.5%
+  not refused for volume_too_low = fit attempted                     2745    58.4%    9966774    92.5%
     refused collinear_regressors                                          0     0.0%          0     0.0%
-    refused not_distinguishable_from_zero                               128     2.7%     152869     1.4%
-    refused implausible_positive_elasticity                               7     0.1%      44080     0.4%
-    refused interval_too_wide                                           221     4.7%     322572     3.0%
-  USABLE                                                             2389    50.8%    9487135    87.7%
+    refused not_distinguishable_from_zero                               129     2.7%     158548     1.5%
+    refused implausible_positive_elasticity                               7     0.1%      43989     0.4%
+    refused interval_too_wide                                           224     4.8%     318115     3.0%
+  USABLE                                                             2385    50.8%    9446122    87.7%
 
   F.C usable estimates
   gate ON : 59 usable; elasticity < -1: 59 (100.0%); -1 <= elasticity < 0: 0 (0.0%); refused for a positive sign: 3
                       min       5%      25%   median      75%      95%      max
-    elasticity     -6.122   -5.072   -3.124   -2.400   -1.962   -1.435   -1.017
-    half-width      0.275    0.317    0.381    0.475    0.701    1.020    1.378
-  gate OFF: 2389 usable; elasticity < -1: 2250 (94.2%); -1 <= elasticity < 0: 139 (5.8%); refused for a positive sign: 7
+    elasticity     -6.123   -5.072   -3.124   -2.399   -1.959   -1.434   -1.017
+    half-width      0.275    0.316    0.381    0.473    0.701    1.020    1.377
+  gate OFF: 2385 usable; elasticity < -1: 2241 (94.0%); -1 <= elasticity < 0: 144 (6.0%); refused for a positive sign: 7
                       min       5%      25%   median      75%      95%      max
-    elasticity    -18.571   -3.837   -2.589   -1.979   -1.471   -0.967   -0.498
-    half-width      0.117    0.257    0.370    0.495    0.691    1.148    9.270
+    elasticity    -18.571   -3.828   -2.580   -1.970   -1.466   -0.968   -0.497
+    half-width      0.117    0.256    0.370    0.494    0.691    1.149    9.270
 
    Gate ON, usable in section A but not here: 4
      23166 (-3.94 [-4.92, -2.95] -> volume_too_low)
@@ -246,27 +251,27 @@ F. SECOND RUN WITH ONE RULE CORRECTED (cancelled orders netted out)
 
    The 15 highest-volume products under the corrected rule:
   StockCode description                       units  units/d prices      days  gate ON                                gate OFF
-  84077     WORLD WAR 2 GLIDERS ASSTD DESI   105899    175.3      6  469/604   -2.76 [-3.24, -2.29]                   -2.76 [-3.24, -2.29]
-  85099B    JUMBO BAG RED RETROSPOT           96442    159.7     12  589/604   -4.95 [-5.48, -4.42]                   -4.95 [-5.48, -4.42]
-  21212     PACK OF 72 RETROSPOT CAKE CASE    94196    156.0      9  594/604   -1.73 [-2.05, -1.42]                   -1.73 [-2.05, -1.42]
-  85123A    WHITE HANGING HEART T-LIGHT HO    91475    151.4     11  603/604   -4.03 [-4.70, -3.36]                   -4.03 [-4.70, -3.36]
-  22197     SMALL POPCORN HOLDER              88303    146.2      6  563/604   -2.16 [-2.68, -1.65]                   -2.16 [-2.68, -1.65]
-  84879     ASSORTED COLOUR BIRD ORNAMENT     79843    132.2      8  582/604   -1.66 [-2.04, -1.28]                   -1.66 [-2.04, -1.28]
-  17003     BROCADE RING PURSE                69669    115.5     12  301/603   -2.94 [-3.45, -2.42]                   -2.94 [-3.45, -2.42]
-  21977     PACK OF 60 PINK PAISLEY CAKE C    56058     92.8      8  564/604   -3.09 [-3.48, -2.70]                   -3.09 [-3.48, -2.70]
-  84991     60 TEATIME FAIRY CAKE CASES       53990     89.4      5  559/604   -4.24 [-4.64, -3.85]                   -4.24 [-4.64, -3.85]
-  15036     ASSORTED COLOURS SILK FAN         43432     71.9     11  431/604   -3.05 [-3.46, -2.65]                   -3.05 [-3.46, -2.65]
-  22492     MINI PAINT SET VINTAGE            43389     90.2      5  360/481   -3.74 [-4.15, -3.33]                   -3.74 [-4.15, -3.33]
-  21213     PACK OF 72 SKULL CAKE CASES       40361     66.8      9  538/604   -1.86 [-2.16, -1.56]                   -1.86 [-2.16, -1.56]
-  20725     LUNCH BAG RED RETROSPOT           39935     66.1      8  594/604   -1.28 [-1.64, -0.93]                   -1.28 [-1.64, -0.93]
-  84755     COLOUR GLASS T-LIGHT HOLDER HA    39918     66.1      6  490/604   -1.98 [-2.26, -1.71]                   -1.98 [-2.26, -1.71]
-  22178     VICTORIAN GLASS HANGING T-LIGH    39597     65.6     10  560/604   -2.09 [-2.47, -1.70]                   -2.09 [-2.47, -1.70]
+  84077     WORLD WAR 2 GLIDERS ASSTD DESI   104891    173.7      6  469/604   -2.75 [-3.23, -2.28]                   -2.75 [-3.23, -2.28]
+  85099B    JUMBO BAG RED RETROSPOT           96256    159.4     12  589/604   -4.95 [-5.47, -4.42]                   -4.95 [-5.47, -4.42]
+  21212     PACK OF 72 RETROSPOT CAKE CASE    94061    155.7      9  594/604   -1.76 [-2.08, -1.45]                   -1.76 [-2.08, -1.45]
+  85123A    WHITE HANGING HEART T-LIGHT HO    91233    151.0     11  603/604   -4.02 [-4.69, -3.35]                   -4.02 [-4.69, -3.35]
+  22197     SMALL POPCORN HOLDER              87736    145.3      6  563/604   -2.15 [-2.66, -1.63]                   -2.15 [-2.66, -1.63]
+  84879     ASSORTED COLOUR BIRD ORNAMENT     79823    132.2      8  582/604   -1.66 [-2.04, -1.28]                   -1.66 [-2.04, -1.28]
+  17003     BROCADE RING PURSE                69666    115.5     12  301/603   -2.94 [-3.45, -2.42]                   -2.94 [-3.45, -2.42]
+  21977     PACK OF 60 PINK PAISLEY CAKE C    56012     92.7      8  564/604   -3.09 [-3.48, -2.70]                   -3.09 [-3.48, -2.70]
+  84991     60 TEATIME FAIRY CAKE CASES       53907     89.2      5  559/604   -4.24 [-4.64, -3.85]                   -4.24 [-4.64, -3.85]
+  15036     ASSORTED COLOURS SILK FAN         43355     71.8     11  431/604   -3.05 [-3.46, -2.65]                   -3.05 [-3.46, -2.65]
+  22492     MINI PAINT SET VINTAGE            43337     90.1      5  360/481   -3.73 [-4.14, -3.32]                   -3.73 [-4.14, -3.32]
+  21213     PACK OF 72 SKULL CAKE CASES       40344     66.8      9  538/604   -1.86 [-2.16, -1.56]                   -1.86 [-2.16, -1.56]
+  84755     COLOUR GLASS T-LIGHT HOLDER HA    39861     66.0      6  490/604   -1.98 [-2.26, -1.71]                   -1.98 [-2.26, -1.71]
+  20725     LUNCH BAG RED RETROSPOT           39598     65.6      8  594/604   -1.20 [-1.56, -0.85]                   -1.20 [-1.56, -0.85]
+  22178     VICTORIAN GLASS HANGING T-LIGH    39250     65.0     10  560/604   -2.07 [-2.45, -1.69]                   -2.07 [-2.45, -1.69]
 
 E. WHAT THIS SHOWS
    As shipped, the estimator answers for 63 of 4707 products (1.3%), which sold 19.5% of units; the volume gate alone refuses 2682 (57.0%).
    Without the gate it would answer for 2396 (50.9%), 94.1% below -1; 2333 of those sell under the 45-a-day floor that cmd/sweep set on synthetic data.
    Larger lines paid less per unit in 1382 of 1398 products with 200+ lines (median price ratio 0.71), and 45.1% of units sold on product-days with more than one price.
-   So a day's price and a day's units can both move with who ordered that day, and the model has no control for it.
+   On 83.9% of the product-days with more than one price, the lines at the lowest price were the larger ones; this command gives the estimator one price and one unit count a day and no order sizes.
    Refitting the 63 usable products on retail-sized lines leaves 2 usable with the gate on; with it off, 38 of 43 move toward zero (median +0.86).
    These estimates are consistent with order-size confounding; this run cannot say how much of any estimate it explains, or that any estimate is right.
    Netting out cancelled orders (section F, a rule added after the first run) takes the gate-on usable count from 63 to 59.

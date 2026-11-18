@@ -49,8 +49,9 @@ const (
 // estimate was computed; see the package comment.
 var rules = []string{
 	"Each line is counted under the first rule that drops it, in this order:",
-	"R0  a line in sheet \"Year 2010-2011\" whose Invoice also appears in sheet \"Year 2009-2010\" is dropped:",
-	"    the two sheets overlap on 2010-12-01..2010-12-09 and the second repeats lines of the first",
+	"R0  a line in sheet \"Year 2010-2011\" is dropped when sheet \"Year 2009-2010\" holds the same Invoice and an",
+	"    identical line (the sheets overlap on 2010-12-01..2010-12-09); a line under a repeated Invoice number",
+	"    that the first sheet never held is kept (tightened after review: it first matched on Invoice alone)",
 	"R1  malformed: missing or unparseable Invoice, StockCode, Quantity, InvoiceDate or Price, or non-integer Quantity",
 	"R2  cancellation: Invoice starts with \"C\"",
 	"R3  Quantity <= 0",
@@ -226,6 +227,7 @@ func report(w io.Writer, command, sum string, sheets []sheetRef, c *cleaner) {
 		fmt.Fprintf(w, "  %-40s %9d  -> %9d kept\n", rule, -dropped, remaining)
 	}
 	step("R0 repeated in the second sheet", k.DupOfEarlier)
+	fmt.Fprintf(w, "     (lines under a repeated Invoice number that were not repeats, kept: %d)\n", k.DupInvoiceNew)
 	step("R1 malformed", k.Malformed)
 	step("R2 cancellation", k.Cancelled)
 	step("R3 quantity <= 0", k.QtyNonPositive)
@@ -305,23 +307,25 @@ func report(w io.Writer, command, sum string, sheets []sheetRef, c *cleaner) {
 var correctedRule = []string{
 	"R2b (corrected rule, added after the first run): R2 drops a cancellation but keeps the order it reversed,",
 	"    so a reversed order still counted as a sale. Here, after R0-R5, each cancellation line (Invoice \"C...\",",
-	"    Quantity < 0, with a Customer ID, product StockCode), taken in time order, removes the latest still-unmatched",
-	"    kept line with the same Customer ID and StockCode and the opposite Quantity, dated at or before it.",
-	"    Price need not match. A cancellation with no match removes nothing. Everything else is as in sections A-C.",
+	"    Quantity < 0, with a Customer ID, product StockCode), taken in time order, looks at the kept lines with the",
+	"    same Customer ID and StockCode dated at or before it. If one has exactly the cancelled quantity left, the",
+	"    latest such line is removed. Otherwise the latest line with more than that left has the quantity taken off",
+	"    (a partial cancellation; added after review). Otherwise nothing is removed. Price need not match.",
+	"    A cancellation with no Customer ID cannot be tied to an order and is not matched.",
 }
 
 // correctedFunnels is what "What this shows" quotes from section F.
 type correctedFunnels struct {
-	matched, units, cancels int
-	on, off                 funnel
+	matched, partial, units, cancels int
+	on, off                          funnel
 }
 
 // writeCorrected is section F: sections A-C again with rule R2b. Sections A-D
 // above are the primary result and are not changed by it.
 func writeCorrected(w io.Writer, c *cleaner, primary []*product, onOpt, offOpt pricing.FitOptions) correctedFunnels {
 	var out correctedFunnels
-	lines, matched, units := netCancellations(c.lines, c.cancels)
-	out.matched, out.units, out.cancels = matched, units, len(c.cancels)
+	lines, matched, partial, units := netCancellations(c.lines, c.cancels)
+	out.matched, out.partial, out.units, out.cancels = matched, partial, units, len(c.cancels)
 	open := openDays(lines)
 	byCode, codes := byProduct(lines)
 	prods, _ := buildProducts(byCode, codes, open, c, onOpt, offOpt)
@@ -332,8 +336,10 @@ func writeCorrected(w io.Writer, c *cleaner, primary []*product, onOpt, offOpt p
 	for _, r := range correctedRule {
 		fmt.Fprintf(w, "   %s\n", r)
 	}
-	fmt.Fprintf(w, "   cancellation lines eligible to match: %d; matched and removed: %d kept lines, %d units\n",
-		len(c.cancels), matched, units)
+	fmt.Fprintf(w, "   cancellation lines eligible to match: %d; lines removed whole: %d; lines reduced: %d; units taken off: %d\n",
+		len(c.cancels), matched, partial, units)
+	fmt.Fprintf(w, "   not matchable (product cancellations with no Customer ID): %d lines, %d units, still counted as sales\n",
+		c.guestCancelLines, c.guestCancelUnits)
 	if len(open) > 0 {
 		fmt.Fprintf(w, "   kept lines now: %d; store-open days: %d; products: %d\n", len(lines), len(open), len(prods))
 	}

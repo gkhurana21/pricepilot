@@ -58,6 +58,7 @@ type cleanCounts struct {
 	Read            int
 	ReadBySheet     []int
 	DupOfEarlier    int // R0
+	DupInvoiceNew   int // same invoice number as an earlier sheet, but not a repeat of any of its lines: kept
 	Malformed       int // R1
 	Cancelled       int // R2
 	QtyNonPositive  int // R3
@@ -70,11 +71,13 @@ type cleanCounts struct {
 // cleaner applies rules R0-R5 in order to a stream of rows. Each dropped line
 // is counted under the first rule that drops it.
 type cleaner struct {
-	counts   cleanCounts
-	invoices []map[string]bool // invoices seen in each sheet, before any rule
-	lines    []line
-	cancels  []cancellation
-	descs    map[string]map[string]int // product -> description -> kept lines
+	counts                             cleanCounts
+	invoices                           []map[string]bool // invoices seen in each sheet, before any rule
+	sigs                               []map[string]int  // whole-line signatures seen in each sheet, with multiplicity
+	guestCancelLines, guestCancelUnits int               // product cancellations with no Customer ID: R2b cannot match them
+	lines                              []line
+	cancels                            []cancellation
+	descs                              map[string]map[string]int // product -> description -> kept lines
 
 	first, last time.Time // InvoiceDate range over every well-formed row read
 }
@@ -86,6 +89,7 @@ func newCleaner() *cleaner {
 func (c *cleaner) add(r row) {
 	for len(c.invoices) <= r.Sheet {
 		c.invoices = append(c.invoices, map[string]bool{})
+		c.sigs = append(c.sigs, map[string]int{})
 		c.counts.ReadBySheet = append(c.counts.ReadBySheet, 0)
 	}
 	c.counts.Read++
@@ -99,20 +103,32 @@ func (c *cleaner) add(r row) {
 		}
 	}
 
-	// R0: a later sheet repeating an invoice an earlier sheet already holds.
+	// R0: a later sheet repeating a line an earlier sheet already holds. The
+	// invoice number alone is not enough: a line is dropped only when an
+	// earlier sheet has the same invoice AND an identical line not yet used to
+	// drop another one. A line under a repeated invoice number that the
+	// earlier sheet never held is counted and kept.
 	if r.Invoice != "" {
+		sig := lineSignature(r)
 		dup := false
 		for s := 0; s < r.Sheet; s++ {
-			if c.invoices[s][r.Invoice] {
-				dup = true
-				break
+			if !c.invoices[s][r.Invoice] {
+				continue
 			}
+			if c.sigs[s][sig] > 0 {
+				c.sigs[s][sig]--
+				dup = true
+			} else {
+				c.counts.DupInvoiceNew++
+			}
+			break
 		}
 		c.invoices[r.Sheet][r.Invoice] = true
 		if dup {
 			c.counts.DupOfEarlier++
 			return
 		}
+		c.sigs[r.Sheet][sig]++
 	}
 
 	switch {
@@ -121,10 +137,15 @@ func (c *cleaner) add(r row) {
 		return
 	case strings.HasPrefix(r.Invoice, "C"):
 		c.counts.Cancelled++
-		if r.Quantity < 0 && r.Customer != "" && isProductCode(r.StockCode) {
-			c.cancels = append(c.cancels, cancellation{
-				Customer: r.Customer, Product: r.StockCode, Qty: int(-r.Quantity), At: r.Time, Seq: c.counts.Read,
-			})
+		if r.Quantity < 0 && isProductCode(r.StockCode) {
+			if r.Customer == "" {
+				c.guestCancelLines++
+				c.guestCancelUnits += int(-r.Quantity)
+			} else {
+				c.cancels = append(c.cancels, cancellation{
+					Customer: r.Customer, Product: r.StockCode, Qty: int(-r.Quantity), At: r.Time, Seq: c.counts.Read,
+				})
+			}
 		}
 		return
 	case r.Quantity <= 0:
@@ -165,6 +186,16 @@ func (c *cleaner) add(r row) {
 	ds[strings.TrimSpace(r.Description)]++
 }
 
+// lineSignature identifies a whole line, so R0 can tell a repeated line from a
+// different line that shares an invoice number.
+func lineSignature(r row) string {
+	return strings.Join([]string{
+		r.Invoice, r.StockCode, strings.TrimSpace(r.Description),
+		strconv.FormatFloat(r.Quantity, 'g', -1, 64), r.Time.Format(time.RFC3339),
+		strconv.FormatFloat(r.Price, 'g', -1, 64), r.Customer, r.Bad,
+	}, "\x1f")
+}
+
 // isProductCode is rule R5: a product's StockCode starts with a digit.
 func isProductCode(code string) bool {
 	return code != "" && code[0] >= '0' && code[0] <= '9'
@@ -172,21 +203,26 @@ func isProductCode(code string) bool {
 
 // netCancellations is the corrected rule R2b, added after the first run found
 // that R2 drops a cancellation but keeps the order it reversed. Taken in time
-// order (ties: file order), each cancellation removes the latest still
-// unmatched kept line with the same Customer ID, the same StockCode and the
-// same quantity, dated at or before it. Price need not match. A cancellation
-// with no such line removes nothing.
-func netCancellations(lines []line, cancels []cancellation) (kept []line, matched, units int) {
-	type key struct {
-		cust, prod string
-		qty        int
-	}
+// order (ties: file order), each cancellation looks at the kept lines with the
+// same Customer ID and StockCode dated at or before it:
+//
+//   - if one has exactly the cancelled quantity still on it, the latest such
+//     line is removed whole;
+//   - otherwise the latest line with more than the cancelled quantity still on
+//     it has that quantity taken off (a partial cancellation: 144 ordered, 72
+//     cancelled, 72 remain);
+//   - otherwise nothing is removed.
+//
+// Price need not match. A cancellation with no Customer ID cannot be tied to
+// an order and is never matched; the caller reports how many there were.
+func netCancellations(lines []line, cancels []cancellation) (kept []line, matched, partial, units int) {
+	type key struct{ cust, prod string }
 	idx := map[key][]int{}
 	for i, l := range lines {
 		if l.Customer == "" {
 			continue
 		}
-		k := key{l.Customer, l.Product, l.Qty}
+		k := key{l.Customer, l.Product}
 		idx[k] = append(idx[k], i)
 	}
 	for _, s := range idx {
@@ -205,27 +241,46 @@ func netCancellations(lines []line, cancels []cancellation) (kept []line, matche
 		}
 		return cs[a].Seq < cs[b].Seq
 	})
-	removed := make([]bool, len(lines))
+	left := make([]int, len(lines)) // quantity still on each line
+	for i, l := range lines {
+		left[i] = l.Qty
+	}
 	for _, c := range cs {
-		s := idx[key{c.Customer, c.Product, c.Qty}]
+		s := idx[key{c.Customer, c.Product}]
+		exact, bigger := -1, -1
 		for j := len(s) - 1; j >= 0; j-- {
 			i := s[j]
-			if removed[i] || lines[i].At.After(c.At) {
+			if left[i] == 0 || lines[i].At.After(c.At) {
 				continue
 			}
-			removed[i] = true
+			if left[i] == c.Qty {
+				exact = i
+				break
+			}
+			if left[i] > c.Qty && bigger < 0 {
+				bigger = i
+			}
+		}
+		switch {
+		case exact >= 0:
+			left[exact] = 0
 			matched++
-			units += lines[i].Qty
-			break
+			units += c.Qty
+		case bigger >= 0:
+			left[bigger] -= c.Qty
+			partial++
+			units += c.Qty
 		}
 	}
 	kept = make([]line, 0, len(lines)-matched)
 	for i, l := range lines {
-		if !removed[i] {
-			kept = append(kept, l)
+		if left[i] == 0 {
+			continue
 		}
+		l.Qty = left[i]
+		kept = append(kept, l)
 	}
-	return kept, matched, units
+	return kept, matched, partial, units
 }
 
 // description is the product's most frequent description among its kept

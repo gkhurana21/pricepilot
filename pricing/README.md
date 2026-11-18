@@ -82,14 +82,14 @@ The lines these figures come from, checked against the output file on every push
       100319 of 529744 product-days (18.9%), carrying 5064616 of 11221670 units (45.1%)
       large lines priced strictly lower than small lines: 1382 of 1398 (98.9%)
       lowest-price lines were larger: 84192 of 100319 product-days (83.9%); equal: 6810; smaller: 9317
-  USABLE                                                               59     1.3%    2005749    18.5%
+  USABLE                                                               59     1.3%    1999734    18.6%
 ```
 
 Three things this exposed that the synthetic tests could not:
 
 - The promo control was the confounder this package knew about. Order size is the same kind of problem, and nothing here controls for it.
 - The refusal for a positive sign fired three times in 4,707 products. A confounder that pushes the slope in the plausible direction passes every check.
-- The first run dropped cancellation lines but kept the orders they reversed, so reversed orders counted as sales. The output keeps that run as printed and adds a second, labelled run with cancelled orders netted out: 63 usable products become 59, and four had cleared the volume gate only because of orders that were later reversed.
+- The first run dropped cancellation lines but kept the orders they reversed, so reversed orders counted as sales. The output keeps that run as printed and adds a second, labelled run with cancelled orders netted out, whole or in part: 63 usable products become 59, and four had cleared the volume gate only because of orders that were later reversed. Cancellations with no customer id (332 lines) cannot be tied to an order and still count as sales.
 
 There is no ground truth in real sales, so none of this says how far off any estimate is. It says the estimator should not be pointed at a catalog with quantity discounts as it stands.
 

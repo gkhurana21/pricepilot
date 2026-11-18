@@ -42,9 +42,9 @@ func handRows() []row {
 		{Sheet: 0, Invoice: "108", StockCode: "85123A", Quantity: 5, Price: 2.50, Time: at10(2010, 1, 7), Description: "HEART HANGING"},
 		{Sheet: 0, Invoice: "109", StockCode: "M", Quantity: 1, Price: 4, Time: at10(2010, 1, 8)},
 		{Sheet: 0, Invoice: "110", StockCode: "85123A", Quantity: -2, Price: 2.50, Time: at10(2010, 1, 9), Bad: "Quantity is not an integer"},
-		// Second sheet: invoice 107 repeats the first sheet and must be dropped
-		// even though the line itself would otherwise be kept.
-		{Sheet: 1, Invoice: "107", StockCode: "22041", Quantity: 7, Price: 1.25, Time: at10(2010, 1, 6)},
+		// Second sheet: this line repeats one the first sheet holds, field for
+		// field, and must be dropped even though it would otherwise be kept.
+		{Sheet: 1, Invoice: "107", StockCode: "22041", Quantity: 7, Price: 1.25, Time: at10(2010, 1, 6), Description: "B"},
 		{Sheet: 1, Invoice: "200", StockCode: "85123A", Quantity: 4, Price: 2.50, Time: at10(2010, 1, 9), Description: "HEART"},
 		{Sheet: 1, Invoice: "201", StockCode: "22041", Quantity: 2, Price: 1.25, Time: at10(2010, 1, 11), Description: "B"},
 	}
@@ -202,8 +202,10 @@ func TestNetCancellations(t *testing.T) {
 		{Invoice: "C3", StockCode: "23166", Quantity: -100, Price: 1.04, Time: jan(5, 10), Customer: "1"},
 		// An order placed after the cancellation is never matched by it.
 		{Invoice: "4", StockCode: "23166", Quantity: 100, Price: 1.04, Time: jan(6, 9), Customer: "1"},
-		// Different quantity, customer or product: no match.
+		// A smaller quantity is a partial cancellation: it comes off the latest
+		// earlier line that still has more than that on it (Jan 6: 100 -> 1).
 		{Invoice: "C5", StockCode: "23166", Quantity: -99, Time: jan(7, 9), Customer: "1"},
+		// A different customer or product: no match.
 		{Invoice: "C6", StockCode: "23166", Quantity: -100, Time: jan(7, 9), Customer: "2"},
 		{Invoice: "C7", StockCode: "22041", Quantity: -100, Time: jan(7, 9), Customer: "1"},
 		// No customer on either side: never matched.
@@ -223,9 +225,15 @@ func TestNetCancellations(t *testing.T) {
 	if len(c.cancels) != 6 {
 		t.Fatalf("kept aside %d cancellations, want 6 (C9 has no customer, C10 is not a product)", len(c.cancels))
 	}
-	kept, matched, units := netCancellations(c.lines, c.cancels)
-	if matched != 2 || units != 124 {
-		t.Fatalf("matched %d lines, %d units; want 2, 124", matched, units)
+	kept, matched, partial, units := netCancellations(c.lines, c.cancels)
+	if matched != 2 || partial != 1 || units != 223 {
+		t.Fatalf("matched %d lines, %d partial, %d units; want 2, 1, 223", matched, partial, units)
+	}
+	if kept[1].Qty != 1 {
+		t.Errorf("the Jan 6 order of 100 with 99 cancelled should have 1 left, has %d", kept[1].Qty)
+	}
+	if c.guestCancelLines != 1 || c.guestCancelUnits != 5 {
+		t.Errorf("guest cancellations: %d lines, %d units; want 1, 5", c.guestCancelLines, c.guestCancelUnits)
 	}
 	var got []time.Time
 	for _, l := range kept {
@@ -238,5 +246,21 @@ func TestNetCancellations(t *testing.T) {
 	// The primary lines are untouched.
 	if len(c.lines) != 5 {
 		t.Errorf("netting changed the primary lines: %d", len(c.lines))
+	}
+}
+
+// A second sheet that reuses an invoice number is a repeat only line by line.
+func TestR0KeepsALineTheEarlierSheetNeverHeld(t *testing.T) {
+	at := time.Date(2010, 12, 3, 10, 0, 0, 0, time.UTC)
+	c := newCleaner()
+	c.add(row{Sheet: 0, Invoice: "536365", StockCode: "22041", Quantity: 6, Price: 1.25, Time: at, Customer: "1"})
+	// Sheet 2: the same line again (a repeat), then a line sheet 1 never had.
+	c.add(row{Sheet: 1, Invoice: "536365", StockCode: "22041", Quantity: 6, Price: 1.25, Time: at, Customer: "1"})
+	c.add(row{Sheet: 1, Invoice: "536365", StockCode: "21212", Quantity: 24, Price: 0.55, Time: at, Customer: "1"})
+	// The repeat can be used once only: a second identical line is new.
+	c.add(row{Sheet: 1, Invoice: "536365", StockCode: "22041", Quantity: 6, Price: 1.25, Time: at, Customer: "1"})
+	if c.counts.DupOfEarlier != 1 || c.counts.DupInvoiceNew != 2 || c.counts.Kept != 3 {
+		t.Fatalf("dropped %d, new under a repeated invoice %d, kept %d; want 1, 2, 3",
+			c.counts.DupOfEarlier, c.counts.DupInvoiceNew, c.counts.Kept)
 	}
 }

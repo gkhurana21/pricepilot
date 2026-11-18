@@ -65,6 +65,15 @@ model Run {
   applyJson     String?
   rollbackJson  String?
   rolledBackAt  DateTime?
+  // The write in flight (status APPLYING or ROLLING_BACK). Set when the write
+  // claims the run, cleared when it finishes. If the process dies in between,
+  // these are what recoverRun reconciles against Shopify's live prices.
+  writeStartedAt   DateTime?
+  // Refreshed after every mutation chunk; a write with no sign of life for
+  // longer than the timeout is treated as interrupted, not in flight.
+  writeHeartbeatAt DateTime?
+  // The plan (every variant, from and to price), stored before the first mutation.
+  writePlanJson    String?
 
   @@index([shop, createdAt])
 }

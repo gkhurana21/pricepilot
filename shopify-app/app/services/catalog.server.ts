@@ -159,7 +159,6 @@ const ORDERS_QUERY = `#graphql
     orders(first: $first, after: $after, query: $query) {
       pageInfo { hasNextPage endCursor }
       nodes {
-        id
         processedAt
         cancelledAt
         tags
@@ -180,7 +179,6 @@ interface OrdersData {
   orders: {
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
     nodes: {
-      id: string;
       processedAt: string | null;
       cancelledAt: string | null;
       tags: string[];
@@ -199,8 +197,9 @@ interface OrdersData {
 
 /**
  * Orders processed on or after `sinceDay` (UTC day index), as order lines.
- * Cancelled orders and lines with no variant are skipped. Order ids and
- * customer data are never read, let alone kept.
+ * Cancelled orders and lines with no variant are skipped. The query asks for
+ * no order id and no customer field (name, email, phone, address): only dates,
+ * tags, and each line's variant, quantity and unit prices.
  */
 export async function fetchOrders(
   graphql: AdminGraphql,

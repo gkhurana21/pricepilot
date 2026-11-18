@@ -11,9 +11,11 @@ import { authenticate } from "../shopify.server";
 import {
   applyRun,
   createRun,
+  findUnfinishedWrite,
   getLatestRun,
   getPolicy,
   getRun,
+  recoverRun,
   rollbackRun,
 } from "../services/review.server";
 import type { Policy, RunView } from "../services/types";
@@ -37,7 +39,11 @@ export const loader = async ({ request }: LoaderFunctionArgs): Promise<LoaderDat
   let run: RunView | null = null;
   let error: string | null = null;
   try {
-    run = runId ? await getRun(shop, runId) : await getLatestRun(shop);
+    // An unfinished write comes first: until it is reconciled, prices on
+    // Shopify may be partly changed, whichever run the merchant opened last.
+    run = runId
+      ? await getRun(shop, runId)
+      : ((await findUnfinishedWrite(shop)) ?? (await getLatestRun(shop)));
     if (runId && !run) error = "That run could not be found.";
   } catch (e) {
     error = messageOf(e);
@@ -69,11 +75,26 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionDat
     }
     if (intent === "apply" && runId) {
       const run = await applyRun(admin.graphql, session.shop, runId);
-      return { ok: true, intent, runId: run.id, message: "Price changes applied" };
+      const message =
+        run.status === "APPLIED"
+          ? "Price changes applied"
+          : run.status === "PARTIAL"
+            ? "Price changes partly applied"
+            : "No price could be applied";
+      return { ok: true, intent, runId: run.id, message };
     }
     if (intent === "rollback" && runId) {
       const run = await rollbackRun(admin.graphql, session.shop, runId);
-      return { ok: true, intent, runId: run.id, message: "Run rolled back" };
+      return {
+        ok: true,
+        intent,
+        runId: run.id,
+        message: run.status === "ROLLED_BACK" ? "Run rolled back" : "Run partly rolled back",
+      };
+    }
+    if (intent === "recover" && runId) {
+      const run = await recoverRun(admin.graphql, session.shop, runId);
+      return { ok: true, intent, runId: run.id, message: "Checked what was written" };
     }
     return { ok: false, intent, error: "Unknown action." };
   } catch (e) {
@@ -91,7 +112,10 @@ export default function Index() {
   const submittedIntent = fetcher.formData?.get("intent");
   const busy: Intent | null =
     fetcher.state !== "idle" &&
-    (submittedIntent === "create" || submittedIntent === "apply" || submittedIntent === "rollback")
+    (submittedIntent === "create" ||
+      submittedIntent === "apply" ||
+      submittedIntent === "rollback" ||
+      submittedIntent === "recover")
       ? submittedIntent
       : null;
 
@@ -118,6 +142,7 @@ export default function Index() {
       onCreate={() => submit("create")}
       onApply={() => submit("apply")}
       onRollback={() => submit("rollback")}
+      onRecover={() => submit("recover")}
     />
   );
 }

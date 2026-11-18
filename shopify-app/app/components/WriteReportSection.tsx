@@ -5,11 +5,24 @@ import {
   formatDateTime,
   reportLine,
   verifiedLabel,
-  writeStatusLabel,
+  writeStatusBadge,
+  writeStatusDetail,
   writeStatusTone,
 } from "./format";
-import { wrap } from "./styles";
+import {
+  bigPrice,
+  firstRowItem,
+  headLine,
+  priceLine,
+  rowItem,
+  rowList,
+  srOnly,
+  subdued,
+  wrap,
+} from "./styles";
 
+// Stacked like the decision rows (RowTables.tsx): a four-column table with a
+// Shopify error message in one cell pushed the last column out of view.
 export function WriteReportSection({
   heading,
   report,
@@ -21,35 +34,35 @@ export function WriteReportSection({
     <s-section heading={heading}>
       <s-stack direction="block" gap="base">
         <s-paragraph>{reportLine(report)}</s-paragraph>
-        <s-text color="subdued">{formatDateTime(report.at)}</s-text>
-        <s-table>
-          <s-table-header-row>
-            <s-table-header listSlot="primary">Product</s-table-header>
-            <s-table-header listSlot="labeled">Price change</s-table-header>
-            <s-table-header listSlot="labeled">Status</s-table-header>
-            <s-table-header listSlot="labeled">Live price read back from Shopify</s-table-header>
-          </s-table-header-row>
-          <s-table-body>
-            {report.items.map((item) => (
-              <s-table-row key={item.skuId}>
-                <s-table-cell>
-                  <span style={wrap}>{item.title}</span>
-                </s-table-cell>
-                <s-table-cell>
-                  {formatCents(item.fromPrice)} {"→"} {formatCents(item.toPrice)}
-                </s-table-cell>
-                <s-table-cell>
-                  <div style={wrap}>
-                    <Badge tone={writeStatusTone(item)}>{writeStatusLabel(item)}</Badge>
-                  </div>
-                </s-table-cell>
-                <s-table-cell>
-                  <span style={wrap}>{verifiedLabel(item)}</span>
-                </s-table-cell>
-              </s-table-row>
-            ))}
-          </s-table-body>
-        </s-table>
+        <s-text color="subdued">
+          {report.recovered
+            ? `Rebuilt ${formatDateTime(report.at)} from the live prices in Shopify, after the write was interrupted.`
+            : formatDateTime(report.at)}
+        </s-text>
+        <ul style={rowList}>
+          {report.items.map((item, i) => {
+            const detail = writeStatusDetail(item);
+            return (
+              <li key={item.skuId} style={i === 0 ? firstRowItem : rowItem}>
+                <div style={headLine}>
+                  <strong style={wrap}>{item.title}</strong>
+                  <Badge tone={writeStatusTone(item)}>{writeStatusBadge(item)}</Badge>
+                </div>
+                <div style={priceLine}>
+                  <span style={bigPrice}>
+                    <span style={srOnly}>From </span>
+                    {formatCents(item.fromPrice)}
+                    <span aria-hidden="true"> → </span>
+                    <span style={srOnly}> to </span>
+                    {formatCents(item.toPrice)}
+                  </span>
+                  <span style={subdued}>{verifiedLabel(item)}</span>
+                </div>
+                {detail && <div style={{ ...wrap, marginTop: 6 }}>{detail}</div>}
+              </li>
+            );
+          })}
+        </ul>
       </s-stack>
     </s-section>
   );

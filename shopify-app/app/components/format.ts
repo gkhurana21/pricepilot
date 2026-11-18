@@ -10,7 +10,6 @@ import type {
   ReviewRow,
   RowOutcome,
   RunStatus,
-  Summary,
   WriteItem,
   WriteReport,
 } from "../services/types";
@@ -94,6 +93,11 @@ export function formatDateTime(iso: string | null | undefined): string {
   return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)} UTC`;
 }
 
+/** A UTC day "2026-02-17" (as stored for order history) -> "2026-02-17 UTC". */
+export function formatDay(day: string | null | undefined): string {
+  return day ? `${day} UTC` : "—";
+}
+
 /** "sha256:027a232f6814cd0b..." -> "027a232f6814". */
 export function shortHash(hash: string): string {
   const bare = hash.includes(":") ? hash.slice(hash.indexOf(":") + 1) : hash;
@@ -102,14 +106,21 @@ export function shortHash(hash: string): string {
 
 const STATUS_LABELS: Record<RunStatus, string> = {
   PREVIEW: "Preview, not applied",
+  APPLYING: "Applying",
   APPLIED: "Applied",
   PARTIAL: "Partly applied",
   FAILED: "Failed",
+  ROLLING_BACK: "Rolling back",
   ROLLED_BACK: "Rolled back",
   ROLLBACK_PARTIAL: "Partly rolled back",
 };
 
-export function statusLabel(status: RunStatus): string {
+/**
+ * APPLYING and ROLLING_BACK read as "Interrupted" once the server has decided
+ * the write is no longer alive (RunView.interrupted / RunListItem.interrupted).
+ */
+export function statusLabel(status: RunStatus, interrupted = false): string {
+  if (interrupted) return "Interrupted";
   return STATUS_LABELS[status] ?? status;
 }
 
@@ -122,9 +133,12 @@ export type BadgeTone =
   | "warning"
   | "critical";
 
-export function statusTone(status: RunStatus): BadgeTone {
+export function statusTone(status: RunStatus, interrupted = false): BadgeTone {
+  if (interrupted) return "critical";
   switch (status) {
     case "PREVIEW":
+    case "APPLYING":
+    case "ROLLING_BACK":
       return "info";
     case "APPLIED":
       return "success";
@@ -146,7 +160,7 @@ export function outcomeTone(outcome: RowOutcome): BadgeTone {
       return "critical";
     case "adjusted":
       return "caution";
-    case "approved":
+    case "accepted":
       return "success";
     default:
       return "neutral";
@@ -190,45 +204,97 @@ export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** "13 products · 9 proposals · 2 approved · 3 adjusted · 4 held back · 4 no proposal" */
-export function funnelLine(summary: Summary, rows: ReviewRow[]): string {
-  const noProposal = rowsByOutcome(rows, "no_proposal").length;
+/**
+ * "13 products · 9 proposals · 3 accepted · 2 adjusted by a guardrail · 4 held
+ * back · 4 no proposal". Counts the same groups the screen shows; the group of
+ * each row comes from the engine's decision (services/rows.ts).
+ */
+export function funnelLine(rows: ReviewRow[]): string {
+  const count = (o: RowOutcome) => rowsByOutcome(rows, o).length;
+  const noProposal = count("no_proposal");
   return [
     plural(rows.length, "product"),
-    plural(summary.total, "proposal"),
-    `${summary.approved} approved`,
-    `${summary.clamped} adjusted`,
-    `${summary.rejected} held back`,
+    plural(rows.length - noProposal, "proposal"),
+    `${count("accepted")} accepted`,
+    `${count("adjusted")} adjusted by a guardrail`,
+    `${count("held_back")} held back`,
     `${noProposal} no proposal`,
   ].join(" · ");
 }
 
-/** "7 written, 1 skipped, 0 failed · 7 of 7 verified by re-reading prices from Shopify" */
+/**
+ * The policy's price ending as a merchant writes it: modulus 100, residue 99
+ * -> ".99". Formats two policy integers; it does not round anything.
+ */
+export function priceEnding(policy: Policy): string | null {
+  const r = policy.rounding;
+  if (!r.enabled || r.modulus !== 100) return null;
+  return `.${String(r.residue).padStart(2, "0")}`;
+}
+
+/**
+ * The badge for an accepted row: either nothing touched the proposal, or the
+ * only change was the price ending (the engine's "rounding" reason).
+ */
+export function acceptedBadgeText(row: ReviewRow, policy: Policy): string {
+  if (row.decidingRule !== "rounding") return "All guardrails passed";
+  const ending = priceEnding(policy);
+  return ending ? `Rounded to ${ending}` : "Rounded to the price ending";
+}
+
+/**
+ * "7 written, 1 skipped, 0 failed · 7 of 7 verified by re-reading prices from
+ * Shopify". Items an interrupted write never wrote are named as such rather
+ * than counted as failures.
+ */
 export function reportLine(report: WriteReport): string {
+  const notWritten = report.items.filter((i) => i.status === "not_written").length;
+  const failed = report.failed - notWritten;
   return (
-    `${report.applied} written, ${report.skipped} skipped, ${report.failed} failed` +
+    `${report.applied} written, ${report.skipped} skipped, ${failed} failed` +
+    (notWritten > 0 ? `, ${notWritten} not written` : "") +
     ` · ${report.verified} of ${report.applied} verified by re-reading prices from Shopify`
   );
 }
 
-export function writeStatusLabel(item: WriteItem): string {
+/** The short badge text for a write item. The explanation is writeStatusDetail. */
+export function writeStatusBadge(item: WriteItem): string {
   switch (item.status) {
     case "applied":
       return "Applied";
     case "stale_price":
-      return "Skipped: price changed since the preview";
     case "edited_since_apply":
-      return "Skipped: price was edited after this run applied it";
+      return "Skipped";
     case "api_error":
-      return item.error ? `Failed: ${item.error}` : "Failed: Shopify returned an error";
+      return "Failed";
+    case "not_written":
+      return "Not written";
     default:
       return item.status;
   }
 }
 
+/** Why an item was not applied, in plain words; null when it was. */
+export function writeStatusDetail(item: WriteItem): string | null {
+  switch (item.status) {
+    case "applied":
+      return null;
+    case "stale_price":
+      return "The price changed after the preview, so it was left alone.";
+    case "edited_since_apply":
+      return "The price was edited outside this app, so it was left alone.";
+    case "api_error":
+      return item.error ? `Shopify returned an error: ${item.error}` : "Shopify returned an error.";
+    case "not_written":
+      return "The write stopped before this price changed.";
+    default:
+      return item.error;
+  }
+}
+
 export function writeStatusTone(item: WriteItem): BadgeTone {
   if (item.status === "applied") return "success";
-  if (item.status === "api_error") return "critical";
+  if (item.status === "api_error" || item.status === "not_written") return "critical";
   return "caution";
 }
 
@@ -259,6 +325,23 @@ export function velocityText(policy: Policy): string {
     `At least ${plural(v.min_days_between_changes, "day")} between changes; ` +
     `at most ${plural(v.max_changes_per_window, "change")} per ${v.window_days}-day window`
   );
+}
+
+/** Zero means inactive, as in the Go policy (enforcer/policy.go). */
+export function hardBoundsText(policy: Policy): string {
+  const lo = policy.hard_floor > 0 ? formatCents(policy.hard_floor) : null;
+  const hi = policy.hard_ceiling > 0 ? formatCents(policy.hard_ceiling) : null;
+  if (lo && hi) return `${lo} to ${hi}`;
+  if (lo) return `At least ${lo}`;
+  if (hi) return `At most ${hi}`;
+  return "None";
+}
+
+/** 0 or 100% means no limit, as in the Go enforcer (enforcer/batch.go). */
+export function batchBudgetText(policy: Policy): string {
+  const bp = policy.max_skus_changed_bp;
+  if (bp <= 0 || bp >= 10000) return "No limit";
+  return `At most ${formatBp(bp)} of the products proposed`;
 }
 
 export function exclusionsText(policy: Policy): string {

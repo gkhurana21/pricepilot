@@ -1,8 +1,13 @@
 import type { RunListItem } from "../services/types";
 import { Badge } from "./Badge";
 import { formatDateTime, shortHash, statusLabel, statusTone } from "./format";
-import { mono } from "./styles";
+import { mono, numeric, srOnly, subdued } from "./styles";
 
+// Sized to fit the admin from 768 px up (narrower, Polaris lists each run as a
+// card). The rollback time sits under the status badge; the policy column
+// shows the version and hash, with the policy id in the tooltip (a shop has
+// one policy id); and there is no "Proposals" column, since it is the sum of
+// the three outcome columns. With all of them the last column was cut off.
 export function HistoryScreen({
   runs,
   error,
@@ -34,13 +39,11 @@ export function HistoryScreen({
               <s-table-header-row>
                 <s-table-header listSlot="primary">Created</s-table-header>
                 <s-table-header listSlot="labeled">Status</s-table-header>
-                <s-table-header listSlot="labeled">Policy</s-table-header>
-                <s-table-header listSlot="labeled" format="numeric">Proposals</s-table-header>
-                <s-table-header listSlot="labeled" format="numeric">Approved</s-table-header>
+                <s-table-header listSlot="labeled" format="numeric">Accepted</s-table-header>
                 <s-table-header listSlot="labeled" format="numeric">Adjusted</s-table-header>
                 <s-table-header listSlot="labeled" format="numeric">Held back</s-table-header>
                 <s-table-header listSlot="labeled" format="numeric">Applied</s-table-header>
-                <s-table-header listSlot="labeled">Rolled back</s-table-header>
+                <s-table-header listSlot="labeled">Policy</s-table-header>
               </s-table-header-row>
               <s-table-body>
                 {runs.map((r) => (
@@ -49,19 +52,37 @@ export function HistoryScreen({
                       <s-link href={hrefFor(r.id)}>{formatDateTime(r.createdAt)}</s-link>
                     </s-table-cell>
                     <s-table-cell>
-                      <Badge tone={statusTone(r.status)}>{statusLabel(r.status)}</Badge>
+                      <Badge tone={statusTone(r.status, r.interrupted)}>
+                        {statusLabel(r.status, r.interrupted)}
+                      </Badge>
+                      {r.rolledBackAt && (
+                        <>
+                          <br />
+                          <span style={subdued}>
+                            <span style={srOnly}>Rolled back at </span>
+                            {formatDateTime(r.rolledBackAt)}
+                          </span>
+                        </>
+                      )}
                     </s-table-cell>
                     <s-table-cell>
-                      <span style={mono}>
-                        {r.policyId} v{r.policyVersion} {shortHash(r.policyHash)}
+                      <span style={numeric}>{r.accepted}</span>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <span style={numeric}>{r.adjusted}</span>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <span style={numeric}>{r.heldBack}</span>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <span style={numeric}>{r.applied}</span>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <span style={mono} title={`${r.policyId} version ${r.policyVersion}, ${r.policyHash}`}>
+                        v{r.policyVersion}{" "}
+                        <span style={subdued}>{shortHash(r.policyHash)}</span>
                       </span>
                     </s-table-cell>
-                    <s-table-cell>{r.proposals}</s-table-cell>
-                    <s-table-cell>{r.approved}</s-table-cell>
-                    <s-table-cell>{r.adjusted}</s-table-cell>
-                    <s-table-cell>{r.heldBack}</s-table-cell>
-                    <s-table-cell>{r.applied}</s-table-cell>
-                    <s-table-cell>{r.rolledBackAt ? formatDateTime(r.rolledBackAt) : "—"}</s-table-cell>
                   </s-table-row>
                 ))}
               </s-table-body>

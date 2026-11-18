@@ -1,7 +1,8 @@
 import type { CSSProperties } from "react";
-import type { ReviewRow } from "../services/types";
+import type { Policy, ReviewRow } from "../services/types";
 import { Badge } from "./Badge";
 import {
+  acceptedBadgeText,
   formatCents,
   formatElasticity,
   formatInterval,
@@ -15,43 +16,25 @@ import {
   reasonMarker,
   ruleLabel,
 } from "./format";
-import { mono, plainList, srOnly, wrap } from "./styles";
+import {
+  bigPrice,
+  firstRowItem,
+  headLine,
+  mono,
+  plainList,
+  priceLine,
+  rowItem,
+  rowList,
+  srOnly,
+  subdued,
+  wrap,
+} from "./styles";
 
 // Each product is a stacked block, not a table row. A seven-column table with
 // the reasons inside the first cell pushed the price and rule columns off the
 // side of the Shopify admin. Stacked, nothing can overflow at any width, and
 // the block reads top to bottom the way a merchant asks the questions: what
 // product, what happens to its price, which rule decided, and why.
-
-const rowList: CSSProperties = { listStyle: "none", margin: 0, padding: 0 };
-
-const rowItem: CSSProperties = {
-  padding: "14px 0",
-  borderTop: "1px solid var(--p-color-border-secondary, #e3e3e3)",
-};
-
-const firstRowItem: CSSProperties = { ...rowItem, borderTop: "none", paddingTop: 4 };
-
-const headLine: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  alignItems: "baseline",
-  justifyContent: "space-between",
-  gap: "4px 12px",
-};
-
-const priceLine: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  alignItems: "baseline",
-  gap: "2px 16px",
-  marginTop: 6,
-  fontVariantNumeric: "tabular-nums",
-};
-
-const bigPrice: CSSProperties = { fontSize: "1.125rem", fontWeight: 600 };
-
-const subdued: CSSProperties = { color: "var(--p-color-text-secondary, #616161)" };
 
 function EstimateLine({ row }: { row: ReviewRow }) {
   const e = row.estimate;
@@ -95,6 +78,8 @@ function Reasons({ row, open }: { row: ReviewRow; open: boolean }) {
                 </span>
                 <span style={wrap}>
                   <span style={srOnly}>{m.label}: </span>
+                  <span title={`Rule id: ${r.rule}`}>{ruleLabel(r.rule)}</span>
+                  {" — "}
                   {r.message}
                 </span>
               </li>
@@ -123,24 +108,42 @@ function ProductName({ row }: { row: ReviewRow }) {
   );
 }
 
-function RuleBadge({ row }: { row: ReviewRow }) {
-  if (!row.decidingRule) return <Badge tone="success">All guardrails passed</Badge>;
+// Badges sit in a flex line that wraps; this keeps a long label from being
+// squeezed into a sliver or clipped, and lets it wrap inside itself if the
+// line is narrower than the label.
+const badgeSlot: CSSProperties = { maxWidth: "100%", minWidth: 0, ...wrap };
+
+function RuleBadge({ row, policy }: { row: ReviewRow; policy: Policy }) {
+  if (row.outcome === "accepted") {
+    // Accepted: nothing touched the proposal, or the engine only tidied the
+    // price ending. Neutral, because no guardrail disagreed with the model.
+    const rounding = row.decision?.reasons?.find((r) => r.rule === "rounding");
+    return (
+      <span style={badgeSlot} title={rounding ? `${rounding.message} (rule id: rounding)` : undefined}>
+        <Badge tone={rounding ? "neutral" : "success"}>{acceptedBadgeText(row, policy)}</Badge>
+      </span>
+    );
+  }
+  if (!row.decidingRule) return null;
   return (
-    <span title={`Rule id: ${row.decidingRule}`}>
+    <span style={badgeSlot} title={`Rule id: ${row.decidingRule}`}>
       <Badge tone={outcomeTone(row.outcome)}>{ruleLabel(row.decidingRule)}</Badge>
     </span>
   );
 }
 
-/** Held back, adjusted and approved rows: the enforcer saw a proposal. */
+/** Held back, adjusted and accepted rows: the enforcer saw a proposal. */
 export function DecisionTable({
   rows,
   label,
   openReasons,
+  policy,
 }: {
   rows: ReviewRow[];
   label: string;
   openReasons: boolean;
+  /** The run's policy, for naming its price ending on accepted rows. */
+  policy: Policy;
 }) {
   return (
     <ul style={rowList} data-section={label}>
@@ -151,7 +154,7 @@ export function DecisionTable({
           <li key={row.skuId} style={i === 0 ? firstRowItem : rowItem}>
             <div style={headLine}>
               <ProductName row={row} />
-              <RuleBadge row={row} />
+              <RuleBadge row={row} policy={policy} />
             </div>
 
             <div style={priceLine}>
@@ -195,7 +198,10 @@ export function NoProposalTable({ rows }: { rows: ReviewRow[] }) {
         <li key={row.skuId} style={i === 0 ? firstRowItem : rowItem}>
           <div style={headLine}>
             <ProductName row={row} />
-            <span title={row.noProposalCode ? `Refusal code: ${row.noProposalCode}` : undefined}>
+            <span
+              style={badgeSlot}
+              title={row.noProposalCode ? `Refusal code: ${row.noProposalCode}` : undefined}
+            >
               <Badge tone="neutral">
                 {row.noProposalCode ? ruleLabel(row.noProposalCode) : "No unit cost"}
               </Badge>

@@ -212,7 +212,7 @@ const chemex = row({
     margin_bp: 0,
     reasons: [
       rule("margin_floor", "clamped", "proposed $42.00 raised to $51.67 by the binding lower bound"),
-      rule("rounding", "clamped", "rounded $51.67 to $51.99 within the admissible range"),
+      rule("rounding", "clamped", "rounded $51.67 to $51.99, the nearest permitted ending that does not go past the proposal"),
       rule("min_change", "info", "$52.00 to $51.99 is a −0.02% move, below the 2.00% worth applying"),
     ],
   }),
@@ -251,7 +251,7 @@ const kenya = row({
   decidingRule: "velocity_min_days",
 });
 
-// ---- adjusted ---------------------------------------------------------------
+// ---- adjusted by a guardrail ------------------------------------------------
 
 const bramble = row({
   n: 5,
@@ -274,12 +274,16 @@ const bramble = row({
     margin_bp: 5384,
     reasons: [
       rule("max_increase", "clamped", "proposed $54.00 lowered to $52.80 by the binding upper bound"),
-      rule("rounding", "clamped", "rounded $52.80 to $51.99 within the admissible range"),
+      rule("rounding", "clamped", "rounded $52.80 to $51.99, the nearest permitted ending that does not go past the proposal"),
     ],
   }),
   outcome: "adjusted",
   decidingRule: "max_increase",
 });
+
+// ---- accepted ---------------------------------------------------------------
+// A clamp whose only clamped reason is rounding is accepted: the engine's
+// BoundByPolicy() is false for it (see services/rows.ts).
 
 const decaf = row({
   n: 6,
@@ -309,9 +313,9 @@ const decaf = row({
     upper_bound: 2530,
     delta_bp: -874,
     margin_bp: 4521,
-    reasons: [rule("rounding", "clamped", "rounded $20.50 to $20.99 within the admissible range")],
+    reasons: [rule("rounding", "clamped", "rounded $20.50 to $20.99, the nearest permitted ending that does not go past the proposal")],
   }),
-  outcome: "adjusted",
+  outcome: "accepted",
   decidingRule: "rounding",
 });
 
@@ -336,14 +340,12 @@ const peru = row({
     margin_bp: 5553,
     reasons: [
       rule("max_decrease", "clamped", "proposed $15.00 raised to $17.00 by the binding lower bound"),
-      rule("rounding", "clamped", "rounded $17.00 to $17.99 within the admissible range"),
+      rule("rounding", "clamped", "rounded $17.00 to $17.99, the nearest permitted ending that does not go past the proposal"),
     ],
   }),
   outcome: "adjusted",
   decidingRule: "max_decrease",
 });
-
-// ---- approved ---------------------------------------------------------------
 
 const ethiopia = row({
   n: 8,
@@ -366,7 +368,7 @@ const ethiopia = row({
     margin_bp: 4207,
     reasons: null,
   }),
-  outcome: "approved",
+  outcome: "accepted",
   decidingRule: null,
 });
 
@@ -391,7 +393,7 @@ const sumatra = row({
     margin_bp: 5712,
     reasons: null,
   }),
-  outcome: "approved",
+  outcome: "accepted",
   decidingRule: null,
 });
 
@@ -472,8 +474,8 @@ const burundi = row({
 
 const rows: ReviewRow[] = [
   monthly, baratza, chemex, kenya,
-  bramble, decaf, peru,
-  ethiopia, sumatra,
+  bramble, peru,
+  decaf, ethiopia, sumatra,
   coldBrew, hario, guatemala, burundi,
 ];
 
@@ -502,6 +504,8 @@ const base = {
   },
   summary,
   rows,
+  writeStartedAt: null,
+  interrupted: false,
 };
 
 function item(
@@ -585,6 +589,21 @@ export const partialRun = {
   rollback: null,
 } satisfies RunView;
 
+function restored(r: ReviewRow, over: Partial<WriteItem> = {}): WriteItem {
+  const d = r.decision as Decision;
+  return {
+    skuId: r.skuId,
+    title: r.title,
+    fromPrice: d.final_price,
+    toPrice: d.current_price,
+    status: "applied",
+    error: null,
+    livePriceAfter: d.current_price,
+    verified: true,
+    ...over,
+  };
+}
+
 export const rolledBackRun = {
   id: "run_01HXROLLED",
   createdAt: "2026-08-16T14:02:11Z",
@@ -594,53 +613,100 @@ export const rolledBackRun = {
   rollback: {
     at: "2026-08-17T09:12:40Z",
     attempted: 4,
+    applied: 4,
+    skipped: 0,
+    failed: 0,
+    verified: 4,
+    items: [restored(ethiopia), restored(bramble), restored(decaf), restored(sumatra)],
+  },
+} satisfies RunView;
+
+// A rollback that left one variant alone because it was edited since: the
+// screen offers "Roll back the rest".
+export const rollbackPartialRun = {
+  ...rolledBackRun,
+  id: "run_01HXROLLBACKPARTIAL",
+  status: "ROLLBACK_PARTIAL",
+  rollback: {
+    at: "2026-08-17T09:12:40Z",
+    attempted: 4,
     applied: 3,
     skipped: 1,
     failed: 0,
     verified: 3,
     items: [
-      {
-        skuId: ethiopia.skuId,
-        title: ethiopia.title,
-        fromPrice: 1899,
-        toPrice: 2200,
+      restored(ethiopia, {
         status: "edited_since_apply",
-        error: null,
+        error: "Live price is 1850 cents, not the 1899 this run applied; left alone.",
         livePriceAfter: 1850,
         verified: false,
-      },
-      {
-        skuId: bramble.skuId,
-        title: bramble.title,
-        fromPrice: 5199,
-        toPrice: 4800,
-        status: "applied",
-        error: null,
-        livePriceAfter: 4800,
-        verified: true,
-      },
-      {
-        skuId: decaf.skuId,
-        title: decaf.title,
-        fromPrice: 2099,
-        toPrice: 2300,
-        status: "applied",
-        error: null,
-        livePriceAfter: 2300,
-        verified: true,
-      },
-      {
-        skuId: sumatra.skuId,
-        title: sumatra.title,
-        fromPrice: 2099,
-        toPrice: 1999,
-        status: "applied",
-        error: null,
-        livePriceAfter: 1999,
-        verified: true,
-      },
+      }),
+      restored(bramble),
+      restored(decaf),
+      restored(sumatra),
     ],
   },
+} satisfies RunView;
+
+// The process died after sending prices and before saving the result.
+export const interruptedRun = {
+  id: "run_01HXINTERRUPTED",
+  createdAt: "2026-08-16T14:02:11Z",
+  status: "APPLYING",
+  ...base,
+  apply: null,
+  rollback: null,
+  writeStartedAt: "2026-08-16T14:31:02Z",
+  interrupted: true,
+} satisfies RunView;
+
+// A write still within its heartbeat window.
+export const applyingRun = {
+  ...interruptedRun,
+  id: "run_01HXAPPLYING",
+  interrupted: false,
+} satisfies RunView;
+
+// What recoverRun rebuilt for the interrupted run above: two prices landed,
+// one never changed, one was edited by someone else in the meantime.
+export const recoveredRun = {
+  id: "run_01HXRECOVERED",
+  createdAt: "2026-08-16T14:02:11Z",
+  status: "PARTIAL",
+  ...base,
+  apply: {
+    at: "2026-08-16T14:52:40Z",
+    attempted: 5,
+    applied: 2,
+    skipped: 1,
+    failed: 2,
+    verified: 2,
+    recovered: true,
+    items: [
+      item(bramble, { status: "applied" }),
+      item(peru, { status: "applied" }),
+      item(decaf, {
+        status: "not_written",
+        error: "The write was interrupted before this price changed.",
+        livePriceAfter: 2300,
+        verified: false,
+      }),
+      item(ethiopia, {
+        status: "edited_since_apply",
+        error:
+          "Live price is 1950 cents: neither the 2200 before this write nor the 1899 it set. It was changed outside this write; left alone.",
+        livePriceAfter: 1950,
+        verified: false,
+      }),
+      item(sumatra, {
+        status: "not_written",
+        error: "The write was interrupted before this price changed.",
+        livePriceAfter: 1999,
+        verified: false,
+      }),
+    ],
+  },
+  rollback: null,
 } satisfies RunView;
 
 export const fixtureRuns = {
@@ -648,6 +714,10 @@ export const fixtureRuns = {
   applied: appliedRun as RunView,
   partial: partialRun as RunView,
   rolledback: rolledBackRun as RunView,
+  rollbackpartial: rollbackPartialRun as RunView,
+  applying: applyingRun as RunView,
+  interrupted: interruptedRun as RunView,
+  recovered: recoveredRun as RunView,
   empty: null,
 } as const;
 

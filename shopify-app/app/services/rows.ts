@@ -1,26 +1,41 @@
-// How an enforcer decision is labelled for a screen. Pure mapping: it reads
-// what the engine decided and names it; it never changes a price.
+// How an enforcer decision is grouped and labelled for a screen. Pure mapping:
+// it reads what the engine decided and names it; it never changes a price and
+// never makes a decision of its own.
 
 import type { Decision, RowOutcome } from "./types";
 
-// approve -> approved, clamp -> adjusted, reject -> held_back. A row with no
-// proposal never reaches the enforcer and is "no_proposal" (set by the caller).
+/**
+ * Mirrors enforcer/decision.go `Decision.BoundByPolicy()` exactly: true when
+ * some reason has effect "clamped" from a rule other than "rounding", i.e. a
+ * guardrail overrode the proposal rather than the price ending being tidied.
+ * Like the Go method it looks only at the reasons, not at the action.
+ */
+export function boundByPolicy(decision: Decision): boolean {
+  return (decision.reasons ?? []).some((r) => r.effect === "clamped" && r.rule !== "rounding");
+}
+
+/**
+ * The group a decided row is shown in. This is a display grouping derived from
+ * the engine's own action and reasons, not a new decision:
+ *   reject                      -> held_back
+ *   BoundByPolicy() is true     -> adjusted ("Adjusted by a guardrail")
+ *   anything else               -> accepted (an approval, or a clamp that only
+ *                                  rounded the price to the policy's ending)
+ * With a price-ending rule on, nearly every proposal is technically a clamp,
+ * so grouping by action alone would put everything under "adjusted". The Go
+ * engine draws the same line for the same reason.
+ * A row with no proposal never reaches the enforcer: the caller sets "no_proposal".
+ */
 export function outcomeOf(decision: Decision): RowOutcome {
-  switch (decision.action) {
-    case "approve":
-      return "approved";
-    case "clamp":
-      return "adjusted";
-    case "reject":
-      return "held_back";
-  }
+  if (decision.action === "reject") return "held_back";
+  return boundByPolicy(decision) ? "adjusted" : "accepted";
 }
 
 /**
  * The rule a merchant should look at: for a reject, the last reason's rule;
- * for an adjusted row, the binding non-rounding rule (the first reason with
- * effect "clamped" that is not rounding), or "rounding" when only rounding
- * moved the price. Approved rows have none.
+ * for a clamp, the binding non-rounding rule (the first reason with effect
+ * "clamped" that is not rounding), or "rounding" when only rounding moved the
+ * price. Untouched approvals have none.
  */
 export function decidingRule(decision: Decision): string | null {
   const reasons = decision.reasons ?? [];
@@ -35,4 +50,18 @@ export function decidingRule(decision: Decision): string | null {
       : null;
   }
   return null;
+}
+
+/** Counts per group, as shown in the funnel line and the run history. */
+export function outcomeCounts(
+  decisions: (Decision | null)[],
+): Record<RowOutcome, number> {
+  const counts: Record<RowOutcome, number> = {
+    accepted: 0,
+    adjusted: 0,
+    held_back: 0,
+    no_proposal: 0,
+  };
+  for (const d of decisions) counts[d ? outcomeOf(d) : "no_proposal"]++;
+  return counts;
 }

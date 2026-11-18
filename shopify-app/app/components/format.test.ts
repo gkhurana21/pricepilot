@@ -1,23 +1,32 @@
 import { describe, it, expect } from "vitest";
 import {
+  acceptedBadgeText,
+  batchBudgetText,
+  hardBoundsText,
   countApplicable,
   exclusionsText,
   formatBp,
   formatCents,
   formatCount,
   formatDateTime,
+  formatDay,
   formatElasticity,
   formatInterval,
   formatSignedBp,
   funnelLine,
   reportLine,
+  priceEnding,
   reasonMarker,
   shortHash,
+  statusLabel,
+  statusTone,
   verifiedLabel,
-  writeStatusLabel,
+  writeStatusBadge,
+  writeStatusDetail,
   ruleLabel,
 } from "./format";
-import type { ReviewRow, Summary, WriteItem, WriteReport } from "../services/types";
+import type { Policy, ReviewRow, WriteItem, WriteReport } from "../services/types";
+import { fixturePolicy } from "../fixtures/runs";
 
 describe("formatCents", () => {
   it("always shows two decimals and a symbol", () => {
@@ -67,9 +76,10 @@ describe("misc", () => {
   it("groups counts", () => {
     expect(formatCount(4812)).toBe("4,812");
   });
-  it("formats dates in a fixed zone", () => {
+  it("formats dates in a fixed zone, and says so", () => {
     expect(formatDateTime("2026-08-16T14:02:33Z")).toBe("2026-08-16 14:02 UTC");
     expect(formatDateTime(null)).toBe("—");
+    expect(formatDay("2026-02-17")).toBe("2026-02-17 UTC");
   });
   it("shortens hashes", () => {
     expect(shortHash("sha256:027a232f6814cd0b99")).toBe("027a232f6814");
@@ -109,37 +119,77 @@ describe("countApplicable", () => {
 });
 
 describe("funnelLine", () => {
-  it("reads the summary and the rows", () => {
-    const summary = { total: 9, approved: 2, clamped: 3, rejected: 4 } as Summary;
+  it("counts the groups the screen shows", () => {
     const rows = [
-      { outcome: "approved" },
+      { outcome: "accepted" },
+      { outcome: "accepted" },
+      { outcome: "adjusted" },
+      { outcome: "held_back" },
       { outcome: "no_proposal" },
       { outcome: "no_proposal" },
     ] as ReviewRow[];
-    expect(funnelLine(summary, rows)).toBe(
-      "3 products · 9 proposals · 2 approved · 3 adjusted · 4 held back · 2 no proposal",
+    expect(funnelLine(rows)).toBe(
+      "6 products · 4 proposals · 2 accepted · 1 adjusted by a guardrail · 1 held back · 2 no proposal",
     );
   });
 });
 
+describe("run status", () => {
+  it("shows a write as in progress until the server calls it interrupted", () => {
+    expect(statusLabel("APPLYING")).toBe("Applying");
+    expect(statusTone("APPLYING")).toBe("info");
+    expect(statusLabel("ROLLING_BACK")).toBe("Rolling back");
+    expect(statusLabel("APPLYING", true)).toBe("Interrupted");
+    expect(statusLabel("ROLLING_BACK", true)).toBe("Interrupted");
+    expect(statusTone("APPLYING", true)).toBe("critical");
+    expect(statusLabel("ROLLBACK_PARTIAL")).toBe("Partly rolled back");
+  });
+});
+
+describe("accepted rows", () => {
+  const rounded = { decidingRule: "rounding" } as ReviewRow;
+  const untouched = { decidingRule: null } as ReviewRow;
+  it("names the policy's price ending, from the policy's own integers", () => {
+    expect(priceEnding(fixturePolicy)).toBe(".99");
+    expect(acceptedBadgeText(rounded, fixturePolicy)).toBe("Rounded to .99");
+    expect(acceptedBadgeText(untouched, fixturePolicy)).toBe("All guardrails passed");
+  });
+  it("falls back to plain words for an ending it cannot write as .NN", () => {
+    const fives: Policy = { ...fixturePolicy, rounding: { modulus: 500, residue: 499, enabled: true } };
+    expect(priceEnding(fives)).toBeNull();
+    expect(acceptedBadgeText(rounded, fives)).toBe("Rounded to the price ending");
+    const off: Policy = { ...fixturePolicy, rounding: { modulus: 100, residue: 99, enabled: false } };
+    expect(priceEnding(off)).toBeNull();
+  });
+});
+
 describe("write reports", () => {
-  const report = { applied: 7, skipped: 1, failed: 0, verified: 7 } as WriteReport;
+  const report = { applied: 7, skipped: 1, failed: 0, verified: 7, items: [] } as unknown as WriteReport;
   it("summarises", () => {
     expect(reportLine(report)).toBe(
       "7 written, 1 skipped, 0 failed · 7 of 7 verified by re-reading prices from Shopify",
     );
   });
-  it("explains each status", () => {
+  it("names items an interrupted write never wrote", () => {
+    const items = [{ status: "not_written" }, { status: "not_written" }, { status: "api_error" }] as WriteItem[];
+    expect(reportLine({ applied: 2, skipped: 1, failed: 3, verified: 2, items } as WriteReport)).toBe(
+      "2 written, 1 skipped, 1 failed, 2 not written · 2 of 2 verified by re-reading prices from Shopify",
+    );
+  });
+  it("gives each status a short badge and a plain explanation", () => {
     const base = { error: null } as WriteItem;
-    expect(writeStatusLabel({ ...base, status: "stale_price" })).toContain(
-      "price changed since the preview",
+    expect(writeStatusBadge({ ...base, status: "applied" })).toBe("Applied");
+    expect(writeStatusDetail({ ...base, status: "applied" })).toBeNull();
+    expect(writeStatusBadge({ ...base, status: "stale_price" })).toBe("Skipped");
+    expect(writeStatusDetail({ ...base, status: "stale_price" })).toContain("changed after the preview");
+    expect(writeStatusBadge({ ...base, status: "edited_since_apply" })).toBe("Skipped");
+    expect(writeStatusDetail({ ...base, status: "edited_since_apply" })).toContain("edited outside this app");
+    expect(writeStatusBadge({ ...base, status: "api_error", error: "Throttled" })).toBe("Failed");
+    expect(writeStatusDetail({ ...base, status: "api_error", error: "Throttled" })).toBe(
+      "Shopify returned an error: Throttled",
     );
-    expect(writeStatusLabel({ ...base, status: "edited_since_apply" })).toContain(
-      "edited after this run applied it",
-    );
-    expect(writeStatusLabel({ ...base, status: "api_error", error: "Throttled" })).toBe(
-      "Failed: Throttled",
-    );
+    expect(writeStatusBadge({ ...base, status: "not_written" })).toBe("Not written");
+    expect(writeStatusDetail({ ...base, status: "not_written" })).toContain("stopped before");
   });
   it("shows verified or mismatch, never colour alone", () => {
     expect(verifiedLabel({ status: "applied", livePriceAfter: 1899, verified: true } as WriteItem)).toBe(
@@ -154,6 +204,22 @@ describe("write reports", () => {
     expect(
       verifiedLabel({ status: "stale_price", livePriceAfter: 1950, verified: false } as WriteItem),
     ).toBe("$19.50 live now (not written)");
+    expect(
+      verifiedLabel({ status: "not_written", livePriceAfter: 2300, verified: false } as WriteItem),
+    ).toBe("$23.00 live now (not written)");
+  });
+});
+
+describe("policy text", () => {
+  it("treats a zero hard bound and a full batch budget as inactive, like the engine", () => {
+    const p = (over: Partial<Policy>) => ({ ...fixturePolicy, ...over });
+    expect(hardBoundsText(p({ hard_floor: 0, hard_ceiling: 0 }))).toBe("None");
+    expect(hardBoundsText(p({ hard_floor: 100, hard_ceiling: 0 }))).toBe("At least $1.00");
+    expect(hardBoundsText(p({ hard_floor: 0, hard_ceiling: 5000 }))).toBe("At most $50.00");
+    expect(hardBoundsText(p({ hard_floor: 100, hard_ceiling: 5000 }))).toBe("$1.00 to $50.00");
+    expect(batchBudgetText(p({ max_skus_changed_bp: 10000 }))).toBe("No limit");
+    expect(batchBudgetText(p({ max_skus_changed_bp: 0 }))).toBe("No limit");
+    expect(batchBudgetText(p({ max_skus_changed_bp: 2500 }))).toBe("At most 25.0% of the products proposed");
   });
 });
 

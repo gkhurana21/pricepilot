@@ -70,6 +70,20 @@ describe("fetchOrders", () => {
     expect((await fetchOrders(admin.graphql, since)).allSynthetic).toBe(false);
   });
 
+  it("asks for no order id and no customer field (what the app declares it reads)", async () => {
+    const admin = new FakeAdmin();
+    const queries: string[] = [];
+    const recording: typeof admin.graphql = (q, o) => {
+      queries.push(q);
+      return admin.graphql(q, o);
+    };
+    await fetchOrders(recording, dayIndex(new Date()) - 10);
+    const fields = queries[0].slice(queries[0].indexOf("nodes {"));
+    expect(fields).not.toMatch(/\bid\b(?! \})/); // only `variant { id }` names an id
+    expect(fields).not.toMatch(/customer|email|phone|address|billing|shipping|name\b/i);
+    expect(fields).toMatch(/processedAt[\s\S]*currentQuantity[\s\S]*variant \{ id \}/);
+  });
+
   it("surfaces GraphQL errors", async () => {
     const admin = new FakeAdmin();
     admin.failReads = true;

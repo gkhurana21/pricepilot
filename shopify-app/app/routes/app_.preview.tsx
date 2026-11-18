@@ -3,7 +3,8 @@
 // plain browser. The trailing underscore in the file name opts this route out
 // of the authenticated `app` layout while keeping the URL /app/preview.
 //
-//   /app/preview?state=preview|applied|partial|rolledback|empty|history
+//   /app/preview?state=preview|applied|partial|rolledback|rollbackpartial|
+//                      applying|interrupted|recovered|empty|history
 
 import { useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
@@ -60,6 +61,7 @@ export default function Preview() {
           onCreate={say}
           onApply={say}
           onRollback={say}
+          onRecover={say}
         />
       )}
     </>
@@ -67,6 +69,7 @@ export default function Preview() {
 }
 
 function runState(id: string): FixtureState {
+  if (id.includes("INTERRUPTED")) return "interrupted";
   if (id.includes("APPLIED")) return "applied";
   if (id.includes("PARTIAL")) return "partial";
   if (id.includes("ROLLED")) return "rolledback";

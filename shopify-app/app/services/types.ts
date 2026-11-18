@@ -157,10 +157,13 @@ export interface EstimateResult {
 
 // ---- what a screen renders -------------------------------------------------
 
-// How a row ended up. "no_proposal" means the estimator declined, so the
-// enforcer never saw it. The other three come from the enforcer's action:
-// approve -> approved, clamp -> adjusted, reject -> held_back.
-export type RowOutcome = "approved" | "adjusted" | "held_back" | "no_proposal";
+// How a row is grouped on screen. "no_proposal" means the estimator declined,
+// so the enforcer never saw it. The other three are read from the enforcer's
+// own decision (see rows.ts): reject -> held_back; a guardrail overrode the
+// proposal (Go's Decision.BoundByPolicy) -> adjusted; otherwise accepted, which
+// includes a clamp that only tidied the price ending. A display grouping of
+// what the engine decided, never a decision of its own.
+export type RowOutcome = "accepted" | "adjusted" | "held_back" | "no_proposal";
 
 export interface ReviewRow {
   skuId: string; // the engine's sku id; we use the variant GID
@@ -181,17 +184,20 @@ export interface ReviewRow {
   decision: Decision | null; // null when there was no proposal
   outcome: RowOutcome;
   // The rule a merchant should look at: for a reject, the last reason's rule;
-  // for an adjusted row, the binding non-rounding rule (or "rounding").
+  // for a clamp, the binding non-rounding rule, or "rounding" when only the
+  // price ending moved. Null for an untouched approval.
   decidingRule: string | null;
 }
 
 export type RunStatus =
   | "PREVIEW" // decided and stored, nothing written to Shopify
+  | "APPLYING" // a write to Shopify is in flight, or was interrupted (see RunView.interrupted)
   | "APPLIED"
   | "PARTIAL" // some variants failed or were skipped
   | "FAILED"
+  | "ROLLING_BACK" // as APPLYING, for a rollback
   | "ROLLED_BACK"
-  | "ROLLBACK_PARTIAL";
+  | "ROLLBACK_PARTIAL"; // some variants were not restored; a retry restores the rest
 
 // One variant's fate when a run was applied or rolled back.
 export interface WriteItem {
@@ -200,9 +206,10 @@ export interface WriteItem {
   fromPrice: Cents;
   toPrice: Cents;
   // "applied", or why not: "stale_price" (the live price no longer matched the
-  // price the decision was made against), "edited_since_apply" (rollback only),
-  // or "api_error".
-  status: "applied" | "stale_price" | "edited_since_apply" | "api_error";
+  // price the decision was made against), "edited_since_apply" (the live price
+  // was neither the price before nor the price this write set), "api_error",
+  // or "not_written" (the write was interrupted and the price never changed).
+  status: "applied" | "stale_price" | "edited_since_apply" | "api_error" | "not_written";
   error: string | null;
   // Price read back from Shopify after the write; null if the re-read failed.
   livePriceAfter: Cents | null;
@@ -213,10 +220,36 @@ export interface WriteReport {
   at: string; // ISO time
   attempted: number;
   applied: number;
-  skipped: number;
-  failed: number;
+  skipped: number; // stale_price or edited_since_apply
+  failed: number; // api_error or not_written
   verified: number; // how many re-reads matched
   items: WriteItem[];
+  // True when this report was rebuilt by recoverRun from live prices after the
+  // write was interrupted, rather than recorded by the write itself.
+  recovered?: boolean;
+}
+
+/** One variant a write is about to send to Shopify. */
+export interface WritePlanItem {
+  skuId: string;
+  variantId: string;
+  productId: string;
+  title: string;
+  fromPrice: Cents; // the live price the write expects to replace
+  toPrice: Cents; // the engine's final_price (apply) or the prior price (rollback)
+}
+
+/**
+ * Stored on the run before the first mutation. If the process dies before the
+ * final save, recoverRun reads Shopify's live prices for `items` and rebuilds
+ * the report from the facts; `settled` carries the items whose fate was known
+ * before any write (skipped, failed, or restored by an earlier rollback).
+ */
+export interface WritePlan {
+  kind: "apply" | "rollback";
+  attempted: number;
+  items: WritePlanItem[];
+  settled: WriteItem[];
 }
 
 export interface DataBasis {
@@ -240,17 +273,23 @@ export interface RunView {
   rows: ReviewRow[];
   apply: WriteReport | null;
   rollback: WriteReport | null;
+  // Set while status is APPLYING or ROLLING_BACK.
+  writeStartedAt: string | null;
+  // True when a write has shown no sign of life for longer than the timeout:
+  // the process died mid-write and recoverRun must reconcile it.
+  interrupted: boolean;
 }
 
 export interface RunListItem {
   id: string;
   createdAt: string;
   status: RunStatus;
+  interrupted: boolean;
   policyId: string;
   policyVersion: number;
   policyHash: string;
   proposals: number;
-  approved: number;
+  accepted: number;
   adjusted: number;
   heldBack: number;
   applied: number; // variants written, 0 for a preview

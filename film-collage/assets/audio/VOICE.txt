@@ -1,0 +1,3 @@
+Narration: OpenRouter speech endpoint (POST https://openrouter.ai/api/v1/audio/speech), model elevenlabs/eleven-v4, voice "george".
+Generated: 2026-11-19
+One clip per line of src/script.js; edges trimmed with ffmpeg silenceremove; durations measured with ffprobe (clips.json).

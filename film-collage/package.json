@@ -1,0 +1,21 @@
+{
+  "name": "pricepilot-film-collage",
+  "private": true,
+  "type": "module",
+  "description": "A 92-second paper-collage explainer film for PricePilot, drawn frame by frame in an HTML canvas, with the real app shown as photographs.",
+  "scripts": {
+    "preview": "node serve.mjs 4173",
+    "audio": "node audio.mjs",
+    "render": "node audio.mjs && node render.mjs",
+    "stills": "node tools/still.mjs",
+    "smooth": "node tools/smooth.mjs",
+    "sync": "node tools/sync.mjs",
+    "pace": "node tools/pace.mjs",
+    "activity": "node tools/activity.mjs",
+    "phrases": "node tools/phrases.mjs",
+    "same": "node tools/same.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.49.1"
+  }
+}

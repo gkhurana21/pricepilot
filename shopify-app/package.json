@@ -80,5 +80,6 @@
       "qs": "^6.16.0"
     }
   },
-  "author": "majesticgk"
+  "author": "Gaurang Khurana",
+  "license": "MIT"
 }

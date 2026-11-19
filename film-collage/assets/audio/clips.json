@@ -1,0 +1,374 @@
+{
+  "lines": {
+    "10": {
+      "file": "line-10.wav",
+      "duration": 5.806,
+      "located": "pauses",
+      "parts": [
+        {
+          "id": "10a",
+          "start": 0,
+          "end": 4.391,
+          "text": "We tried sixty-two million times to make the rules give a wrong answer."
+        },
+        {
+          "id": "10b",
+          "start": 4.851,
+          "end": 5.806,
+          "text": "They never did."
+        }
+      ],
+      "pauses": [
+        [
+          4.391,
+          4.851
+        ]
+      ]
+    },
+    "11": {
+      "file": "line-11.wav",
+      "duration": 3.144,
+      "located": "pauses",
+      "parts": [
+        {
+          "id": "11a",
+          "start": 0,
+          "end": 1.321,
+          "text": "The agent suggests."
+        },
+        {
+          "id": "11b",
+          "start": 1.801,
+          "end": 3.144,
+          "text": "The rules decide."
+        }
+      ],
+      "pauses": [
+        [
+          1.321,
+          1.801
+        ]
+      ]
+    },
+    "01": {
+      "file": "line-01.wav",
+      "duration": 5.575,
+      "located": "pauses",
+      "parts": [
+        {
+          "id": "01a",
+          "start": 0,
+          "end": 3.899,
+          "text": "Change a price by one percent, and profit moves by eleven."
+        },
+        {
+          "id": "01b",
+          "start": 4.358,
+          "end": 5.575,
+          "text": "In either direction."
+        }
+      ],
+      "pauses": [
+        [
+          1.827,
+          2.107
+        ],
+        [
+          3.899,
+          4.358
+        ]
+      ]
+    },
+    "02": {
+      "file": "line-02.wav",
+      "duration": 5.074,
+      "located": "pauses",
+      "parts": [
+        {
+          "id": "02a",
+          "start": 0,
+          "end": 2.656,
+          "text": "So shopkeepers change prices by hand."
+        },
+        {
+          "id": "02b",
+          "start": 3.132,
+          "end": 3.742,
+          "text": "Carefully."
+        },
+        {
+          "id": "02c",
+          "start": 4.236,
+          "end": 5.074,
+          "text": "Nervously."
+        }
+      ],
+      "pauses": [
+        [
+          2.656,
+          3.132
+        ],
+        [
+          3.742,
+          4.236
+        ]
+      ]
+    },
+    "03": {
+      "file": "line-03.wav",
+      "duration": 5.004,
+      "located": "pauses",
+      "parts": [
+        {
+          "id": "03a",
+          "start": 0,
+          "end": 1.668,
+          "text": "PricePilot gives them a helper."
+        },
+        {
+          "id": "03b",
+          "start": 2.19,
+          "end": 5.004,
+          "text": "It reads the order history and suggests a price."
+        }
+      ],
+      "pauses": [
+        [
+          1.668,
+          2.19
+        ]
+      ]
+    },
+    "04": {
+      "file": "line-04.wav",
+      "duration": 9.865,
+      "located": "pauses",
+      "parts": [
+        {
+          "id": "04a",
+          "start": 0,
+          "end": 2.214,
+          "text": "But the helper never gets the last word."
+        },
+        {
+          "id": "04b",
+          "start": 2.658,
+          "end": 3.728,
+          "text": "A rulebook does."
+        },
+        {
+          "id": "04c",
+          "start": 4.609,
+          "end": 5.716,
+          "text": "Your margin floor."
+        },
+        {
+          "id": "04d",
+          "start": 6.219,
+          "end": 8.018,
+          "text": "How far a price may move."
+        },
+        {
+          "id": "04e",
+          "start": 8.516,
+          "end": 9.865,
+          "text": "What is off limits."
+        }
+      ],
+      "pauses": [
+        [
+          2.214,
+          2.658
+        ],
+        [
+          3.728,
+          4.609
+        ],
+        [
+          5.716,
+          6.219
+        ],
+        [
+          8.018,
+          8.516
+        ]
+      ]
+    },
+    "05": {
+      "file": "line-05.wav",
+      "duration": 6.586,
+      "located": "pauses",
+      "parts": [
+        {
+          "id": "05a",
+          "start": 0,
+          "end": 3.743,
+          "text": "Every suggestion is accepted, adjusted, or refused."
+        },
+        {
+          "id": "05b",
+          "start": 4.176,
+          "end": 6.586,
+          "text": "And every refusal names its rule."
+        }
+      ],
+      "pauses": [
+        [
+          1.788,
+          2.056
+        ],
+        [
+          2.685,
+          2.918
+        ],
+        [
+          3.743,
+          4.176
+        ],
+        [
+          5.377,
+          5.52
+        ]
+      ]
+    },
+    "06": {
+      "file": "line-06.wav",
+      "duration": 6.672,
+      "located": "pauses",
+      "parts": [
+        {
+          "id": "06a",
+          "start": 0,
+          "end": 2.668,
+          "text": "Here is the real app, inside Shopify."
+        },
+        {
+          "id": "06b",
+          "start": 3.244,
+          "end": 6.672,
+          "text": "The order history here is synthetic, and the app says so."
+        }
+      ],
+      "pauses": [
+        [
+          1.178,
+          1.508
+        ],
+        [
+          2.668,
+          3.244
+        ],
+        [
+          5.259,
+          5.541
+        ]
+      ]
+    },
+    "07": {
+      "file": "line-07.wav",
+      "duration": 3.09,
+      "located": "cut from line 07 (0.000 to 3.090 s of it)",
+      "parts": [
+        {
+          "id": "07a",
+          "start": 0,
+          "end": 3.09,
+          "text": "Refusals come first, with the reasons listed."
+        }
+      ],
+      "pauses": [
+        [
+          1.514,
+          1.781
+        ]
+      ]
+    },
+    "08": {
+      "file": "line-08.wav",
+      "duration": 3.454,
+      "located": "pauses",
+      "parts": [
+        {
+          "id": "08a",
+          "start": 0,
+          "end": 3.454,
+          "text": "Apply, and each price is read back from Shopify."
+        }
+      ],
+      "pauses": [
+        [
+          0.57,
+          0.863
+        ]
+      ]
+    },
+    "09": {
+      "file": "line-09.wav",
+      "duration": 1.076,
+      "located": "cut from line 09 (0.000 to 1.076 s of it)",
+      "parts": [
+        {
+          "id": "09a",
+          "start": 0,
+          "end": 1.076,
+          "text": "Change your mind,"
+        }
+      ],
+      "pauses": []
+    },
+    "07b": {
+      "file": "line-07b.wav",
+      "duration": 2.698,
+      "located": "cut from line 07 (3.505 to 6.203 s of it)",
+      "parts": [
+        {
+          "id": "07b",
+          "start": 0,
+          "end": 2.698,
+          "text": "Then the four prices a rule pulled back,"
+        }
+      ],
+      "pauses": []
+    },
+    "07c": {
+      "file": "line-07c.wav",
+      "duration": 1.996,
+      "located": "cut from line 07 (6.382 to 8.378 s of it)",
+      "parts": [
+        {
+          "id": "07c",
+          "start": 0,
+          "end": 1.996,
+          "text": "and the one that passed every rule."
+        }
+      ],
+      "pauses": [
+        [
+          1.099,
+          1.233
+        ]
+      ]
+    },
+    "09b": {
+      "file": "line-09b.wav",
+      "duration": 1.541,
+      "located": "cut from line 09 (1.171 to 2.712 s of it)",
+      "parts": [
+        {
+          "id": "09b",
+          "start": 0,
+          "end": 1.541,
+          "text": "and everything goes back."
+        }
+      ],
+      "pauses": [
+        [
+          0.206,
+          0.335
+        ]
+      ]
+    }
+  },
+  "backend": "openrouter",
+  "voice": "elevenlabs/eleven-v4 \"george\""
+}

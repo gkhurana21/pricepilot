@@ -3,10 +3,16 @@
 **Repricing for Shopify in which a model proposes prices and a deterministic policy engine decides. The agent suggests, the rules decide, and every run can be undone.**
 
 <p align="center">
-  <img src="docs/demo.gif" alt="In the Shopify admin: a repricing preview that lists refused proposals first with the rule that refused each, then the adjusted and accepted ones; the changes are applied and verified by re-reading prices from Shopify, then rolled back." width="920">
+  <a href="https://youtu.be/ncczuPv6ABM"><img src="docs/demo.gif" alt="A clip from the film: a photograph of the real app in the Shopify admin, taped to a paper desk. A pencil rings the app's 'Synthetic order history' notice, underlines 'Held back: proposed, and the policy refused', rings the rule 'Change too small' and brackets the listed reasons." width="800"></a>
 </p>
 
-*One run on a Shopify development store: preview, apply, roll back. The order history behind it is synthetic and the app says so on screen.*
+<p align="center">
+  <a href="https://youtu.be/ncczuPv6ABM"><img src="https://img.shields.io/badge/Watch%20the%20film-1%3A32-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch the film on YouTube (1:32)"></a>
+</p>
+
+*A silent clip from **[the film](https://youtu.be/ncczuPv6ABM)**: 92 seconds, narrated, a paper collage drawn frame by frame by the code in [`film-collage/`](film-collage/README.md), with the real app in the middle of it.*
+
+What is and is not real in it: the coffee stall, the bird and the rulebook are an illustration of how PricePilot works. The six photographs of a screen are unretouched screenshots of the app from one run on a Shopify development store: preview, apply, roll back. The order history behind that run is synthetic, and the app says so on screen. The narration is a synthetic voice, and the music and sound effects are synthesised by the same code. The figure the film opens on (a 1% change in price moves operating profit by 11%) is from Marn and Rosiello, *Harvard Business Review*, 1992: an average over 2,463 large companies with volume held constant. It says how sensitive profit is to price. It is not a claim about Shopify merchants or about what PricePilot achieves.
 
 ## What it is
 
@@ -127,7 +133,12 @@ cmd/sweep      where the estimator stops working, measured
 cmd/realdata   the estimator on a real retailer's transactions
 cmd/seedplan   the synthetic order history, generated deterministically
 shopify-app/   the embedded Shopify app: review, apply, roll back
+film-collage/  the film, as code that renders it
 PRD.md         product requirements, phases, decisions
 ```
 
 Phases 1 to 3 of [the PRD](PRD.md) are built. Phase 4 (per-proposal explanations, audit export, a model card) is not.
+
+## License
+
+[MIT](LICENSE).

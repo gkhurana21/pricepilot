@@ -38,13 +38,13 @@ cd shopify-app
 
 ```sh
 # 1. Look first. Read-only: lists what it would create, sends nothing.
-node seed/seed.mjs --plan seed/plan.json --store pricepilot-dev-tshktyyz.myshopify.com --dry-run
+node seed/seed.mjs --plan seed/plan.json --store your-dev-store.myshopify.com --dry-run
 
 # 2. Seed products, then orders (about 20 minutes: see below).
-node seed/seed.mjs --plan seed/plan.json --store pricepilot-dev-tshktyyz.myshopify.com
+node seed/seed.mjs --plan seed/plan.json --store your-dev-store.myshopify.com
 
 # 3. Read everything back and compare it with the plan.
-node seed/verify.mjs --plan seed/plan.json --store pricepilot-dev-tshktyyz.myshopify.com
+node seed/verify.mjs --plan seed/plan.json --store your-dev-store.myshopify.com
 ```
 
 Step 3 prints `90 days x 13 products match the plan` and exits 0 on success.
